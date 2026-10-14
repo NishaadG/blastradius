@@ -5,10 +5,14 @@ import "./globals.css";
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
 const jetbrains = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["latin"] });
 
+const description =
+  "Supply-chain vulnerability triage agent with a FalkorDB graph brain: paths, blast radius, memory and proof.";
+
 export const metadata: Metadata = {
   title: "Blastradius",
-  description:
-    "Supply-chain vulnerability triage agent with a FalkorDB graph brain: paths, blast radius, memory and proof.",
+  description,
+  openGraph: { title: "Blastradius", description, type: "website" },
+  twitter: { card: "summary", title: "Blastradius", description },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
