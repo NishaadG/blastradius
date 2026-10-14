@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
-import { Brain as BrainIcon, Building2, CornerDownLeft, Play, Search, ShieldAlert, Sparkles, Square, Waypoints, X } from "lucide-react";
+import { Brain as BrainIcon, Building2, CornerDownLeft, Play, Search, ShieldAlert, ShieldCheck, Sparkles, Square, Waypoints, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import GraphCanvas from "@/components/GraphCanvas";
 import ResultPanel from "@/components/ResultPanel";
@@ -11,6 +11,7 @@ import { Pill, Spinner } from "@/components/ui";
 import { api, AskResult, Brain, GraphData, healthy, ID_RE, Risk, TenantInfo, TriageResult } from "@/lib/api";
 
 type Tab = "risk" | "memory" | "company";
+const cn = clsx;
 
 const TABS: { id: Tab; label: string; icon: typeof ShieldAlert }[] = [
   { id: "risk", label: "Risk board", icon: ShieldAlert },
@@ -65,6 +66,11 @@ export default function Home() {
   useEffect(() => {
     tenantRef.current = tenant;
   }, [tenant]);
+
+  const [evalInfo, setEvalInfo] = useState<{ passed: number; total: number } | null>(null);
+  useEffect(() => {
+    api.evals().then((e) => e.available && setEvalInfo({ passed: e.passed ?? 0, total: e.total ?? 0 })).catch(() => {});
+  }, []);
 
   const [online, setOnline] = useState(true);
   useEffect(() => {
@@ -265,7 +271,9 @@ export default function Home() {
           onClick={() => (demo ? (cancelDemo.current = true) : playDemo())}
           className={clsx(
             "flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition",
-            demo ? "border-bad/50 text-bad hover:bg-bad/10" : "border-accent/50 text-accent hover:bg-accent/10",
+            demo
+              ? "border-bad/50 text-bad hover:bg-bad/10"
+              : cn("border-accent/50 text-accent hover:bg-accent/10", !result && !answer && "shadow-[0_0_0_3px_rgba(53,224,242,0.10)]"),
           )}
         >
           {demo ? <><Square className="h-3 w-3" /> Stop demo</> : <><Play className="h-3 w-3" /> Guided demo</>}
@@ -275,7 +283,11 @@ export default function Home() {
             <span className={clsx("h-1.5 w-1.5 rounded-full", isUp ? "bg-good" : "bg-bad animate-pulse")} />
             {isUp ? `FalkorDB · ${nodeCount.toLocaleString()} nodes · ${edgeCount.toLocaleString()} edges` : "FalkorDB offline"}
           </Pill>
-          <span className="text-[11px] text-faint">graph isolated per tenant</span>
+          {evalInfo && (
+            <Pill tone={evalInfo.passed === evalInfo.total ? "good" : "warn"} className="py-1" >
+              <ShieldCheck className="h-3 w-3" /> {evalInfo.passed}/{evalInfo.total} evals vs independent ground truth
+            </Pill>
+          )}
         </div>
       </header>
 

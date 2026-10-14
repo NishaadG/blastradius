@@ -144,7 +144,10 @@ export async function healthy(): Promise<boolean> {
   }
 }
 
+export type EvalInfo = { available: boolean; passed?: number; total?: number };
+
 export const api = {
+  evals: () => j<EvalInfo>("/api/evals"),
   tenants: () => j<TenantInfo[]>("/api/tenants"),
   graph: (t: string) => j<GraphData>(`/api/${t}/graph`),
   risk: (t: string) => j<Risk>(`/api/${t}/risk`),

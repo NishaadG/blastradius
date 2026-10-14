@@ -28,6 +28,19 @@ def health():
     return {"ok": True, "graphs": db.tenants_present()}  # raises RedisError -> 503 when the graph is down
 
 
+@app.get("/api/evals")
+def evals():
+    """Latest result of `python -m evals.run`, read from the report it wrote (never hard-coded)."""
+    import re
+    from pathlib import Path
+
+    p = Path(__file__).resolve().parents[2] / "EVALS.md"
+    if not p.exists():
+        return {"available": False}
+    m = re.search(r"\*\*(\d+)/(\d+) checks passed", p.read_text(encoding="utf-8"))
+    return {"available": bool(m), "passed": int(m.group(1)) if m else 0, "total": int(m.group(2)) if m else 0}
+
+
 @app.get("/api/tenants")
 def tenants():
     out = []
