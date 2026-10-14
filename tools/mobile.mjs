@@ -1,0 +1,10 @@
+﻿import { chromium } from "playwright";
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+await p.goto("http://localhost:3001", { waitUntil: "load" });
+await p.waitForTimeout(2500);
+await p.fill("input[aria-label^='Triage']", "CVE-2026-41242");
+await p.keyboard.press("Enter");
+await p.waitForTimeout(5000);
+await p.screenshot({ path: process.argv[2], fullPage: true });
+await b.close();

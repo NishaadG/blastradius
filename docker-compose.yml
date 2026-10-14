@@ -1,10 +1,50 @@
-﻿services:
+﻿# Everything runs locally for free.
+#   docker compose up -d falkordb          # just the database (dev: run api/web on the host)
+#   docker compose --profile seed run --rm seed   # build the graphs from public data (needs internet, ~1 min)
+#   docker compose up -d --build           # database + api (:8000) + web (:3001)
+services:
   falkordb:
     image: falkordb/falkordb:v4.14.10
     ports:
       - "6379:6379"
-      - "3000:3000"
+      - "3000:3000"   # FalkorDB browser UI: inspect the graph yourself
     volumes:
       - falkor_data:/var/lib/falkordb/data
+
+  api:
+    build: ./backend
+    environment:
+      FALKOR_HOST: falkordb
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}   # optional: free-tier key; without it the offline router answers
+    depends_on:
+      - falkordb
+    ports:
+      - "8000:8000"
+    volumes:
+      - br_data:/app/data
+
+  web:
+    build:
+      context: ./web
+      args:
+        NEXT_PUBLIC_API: http://localhost:8000
+    depends_on:
+      - api
+    ports:
+      - "3001:3001"
+
+  seed:
+    profiles: ["seed"]
+    build: ./backend
+    command: ["python", "-m", "blastradius.build"]
+    environment:
+      FALKOR_HOST: falkordb
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}       # optional: lifts the 60 req/h anonymous GitHub API limit
+    depends_on:
+      - falkordb
+    volumes:
+      - br_data:/app/data
+
 volumes:
   falkor_data:
+  br_data:

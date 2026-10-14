@@ -1,0 +1,191 @@
+"""Evaluation: does the graph answer the same as an independent computation from raw data?
+
+Ground truth is derived WITHOUT FalkorDB: lockfiles parsed from the cached raw files, OSV results from the
+cache, exposure via BFS over the curated call list, owners from CODEOWNERS. Each check compares that to the
+answer the graph-backed product gives.
+
+    python -m evals.run            # writes EVALS.md at repo root, exit 1 on any failure
+"""
+import json
+import sys
+from collections import deque
+from pathlib import Path
+
+from blastradius import db, ingest as ing, memory, osv, queries as q, triage
+from blastradius.config import DATA_DIR
+from blastradius.parsers import PARSERS
+from blastradius.tenants import TENANTS
+
+results: list[tuple[str, str, bool, str]] = []
+
+
+def check(group: str, name: str, ok: bool, detail: str = ""):
+    results.append((group, name, bool(ok), detail))
+
+
+def load_truth(tenant):
+    t = TENANTS[tenant]
+    svc_pkgs, svc_edges, dev_of = {}, {}, {}
+    for s in t["services"]:
+        if s["kind"] == "none":
+            continue
+        f = ing.RAW / t["repo"].replace("/", "__") / f"{s['path']}/{s['file']}".replace("/", "__")
+        pk, ed = PARSERS[s["kind"]](f.read_text(encoding="utf-8"))
+        svc_pkgs[s["name"]] = set(pk)
+        svc_edges[s["name"]] = {(a, b) for a, b, _ in ed if a is not None} | {(s["name"], b) for a, b, _ in ed if a is None}
+        dev_of[s["name"]] = {k for k, v in pk.items() if v["dev"]}
+    cache = json.loads((DATA_DIR / "osv_cache.json").read_text(encoding="utf-8"))
+    tenant_pkgs = set().union(*svc_pkgs.values())  # the OSV cache is shared across tenants: scope to this one
+    affected = {}  # advisory id -> set(pkg keys)
+    for key, ids in cache["queries"].items():
+        if key not in tenant_pkgs:
+            continue
+        for vid in ids:
+            affected.setdefault(vid, set()).add(key)
+    return t, svc_pkgs, svc_edges, dev_of, affected
+
+
+def exposure_truth(t, service):
+    exposed = {s["name"] for s in t["services"] if s.get("exposed")}
+    out = {}
+    for s in t["services"]:
+        out.setdefault(s["name"], [])
+    adj = {}
+    for a, b in t["calls"]:
+        adj.setdefault(a, []).append(b)
+    dist = {e: 0 for e in exposed}
+    dq = deque(exposed)
+    while dq:
+        x = dq.popleft()
+        for y in adj.get(x, []):
+            if y not in dist:
+                dist[y] = dist[x] + 1
+                dq.append(y)
+    return dist.get(service)
+
+
+def eval_tenant(tenant):
+    t, svc_pkgs, svc_edges, dev_of, affected = load_truth(tenant)
+    all_svcs = {s["name"] for s in t["services"]}
+    adv_ids = [r[0] for r in db.read(tenant, "MATCH (a:Advisory) RETURN a.id").result_set]
+    check(f"{tenant}/coverage", "every OSV advisory in the cache is in the graph",
+          set(adv_ids) == set(affected), f"{len(adv_ids)} vs {len(affected)}")
+    bad_services = bad_paths = bad_verdict = 0
+    for vid in adv_ids:
+        exp_svcs = {s for s, pk in svc_pkgs.items() if pk & affected[vid]}
+        paths, _ = q.affected_paths(tenant, vid)
+        got = {p["service"] for p in paths}
+        if got != exp_svcs:
+            bad_services += 1
+        for p in paths:
+            hops = list(zip(p["path"], p["path"][1:]))
+            if p["path"][0] != p["service"] or not all(h in svc_edges[p["service"]] for h in hops) or p["path"][-1] not in affected[vid]:
+                bad_paths += 1
+        exp_prod = {s for s in exp_svcs if affected[vid] & (svc_pkgs[s] - dev_of[s])}
+        res = triage.run_triage(tenant, vid)
+        exp_verdict = "AFFECTED" if exp_prod else ("NEEDS_HUMAN" if exp_svcs else "NOT_AFFECTED")
+        if res["verdict"] != exp_verdict:
+            bad_verdict += 1
+    n = len(adv_ids)
+    check(f"{tenant}/affected-services", f"affected service set equals independent computation for {n} advisories", bad_services == 0, f"{bad_services} mismatches")
+    check(f"{tenant}/path-validity", "every returned path is a real chain of lockfile edges ending at an affected package", bad_paths == 0, f"{bad_paths} invalid")
+    check(f"{tenant}/verdicts", f"deterministic verdict equals independent rule for {n} advisories", bad_verdict == 0, f"{bad_verdict} mismatches")
+
+    bad_exp = 0
+    for s in all_svcs:
+        ep, _ = q.exposure_path(tenant, s)
+        truth = exposure_truth(t, s)
+        got = None if ep is None else len(ep) - 1
+        if got != truth:
+            bad_exp += 1
+    check(f"{tenant}/exposure", f"internet-exposure distance matches BFS for {len(all_svcs)} services", bad_exp == 0, f"{bad_exp} mismatches")
+
+    co = ing.fetch(t["repo"], t["branch"], t["codeowners"])
+    truth_owned = {}
+    for o, s in ing.parse_codeowners(co, t["services"]):
+        truth_owned.setdefault(s, set()).add(o)
+    bad_own = sum(1 for s in all_svcs if {o["owner"] for o in q.owners(tenant, s)[0]} != truth_owned.get(s, set()))
+    check(f"{tenant}/ownership", f"owners equal CODEOWNERS for {len(all_svcs)} services", bad_own == 0, f"{bad_own} mismatches")
+
+    bad_callers = 0
+    for s in all_svcs:
+        callers = {c["service"] for c in q.upstream_callers(tenant, s)[0]}
+        seen, dq = set(), deque([s])
+        rev = {}
+        for a, b in t["calls"]:
+            rev.setdefault(b, []).append(a)
+        while dq:
+            x = dq.popleft()
+            for y in rev.get(x, []):
+                if y not in seen:
+                    seen.add(y)
+                    dq.append(y)
+        seen.discard(s)
+        if callers != seen:
+            bad_callers += 1
+    check(f"{tenant}/blast-radius", f"transitive upstream callers equal reverse-BFS for {len(all_svcs)} services", bad_callers == 0, f"{bad_callers} mismatches")
+
+
+def eval_scenarios():
+    t = "boutique"
+    r = triage.run_triage(t, "GHSA-jfh8-c2jp-5v3q")
+    check("scenario", "Log4Shell (Maven) is NOT_AFFECTED by proof of absence", r["verdict"] == "NOT_AFFECTED" and r["reason"] == "no_path")
+    r = triage.run_triage(t, "GHSA-h755-8qp9-cq85")
+    check("scenario", "protobufjs advisory with a fixed version in use is NOT_AFFECTED (version outside range)",
+          r["verdict"] == "NOT_AFFECTED" and r["reason"] == "version_outside_range", r["headline"])
+    r = triage.run_triage(t, "CVE-2099-0000")
+    check("scenario", "unknown identifier is NEEDS_HUMAN, never guessed", r["verdict"] == "NEEDS_HUMAN")
+    top = triage.risk_board(t)["advisories"][0]
+    r = triage.run_triage(t, top["id"])
+    check("scenario", "top-ranked advisory is AFFECTED and every action is gated", r["verdict"] == "AFFECTED" and all(a["status"] == "pending_approval" for a in r["actions"]))
+
+    # memory: decision becomes precedent for a different advisory on the same package
+    db.write(t, "MATCH (n) WHERE n:Case OR n:Run OR n:Step DETACH DELETE n")
+    a1 = triage.run_triage(t, "CVE-2026-41242")
+    cid = memory.record_decision(t, a1["advisory"]["id"], "patched", "eval", "eval", [s["service"] for s in a1["services"]], eco="npm")
+    a2 = triage.run_triage(t, "CVE-2026-48712")
+    check("memory", "a decision on one protobufjs advisory is cited when triaging another", any(p["id"] == cid for p in a2["precedents"]))
+    a1b = triage.run_triage(t, "CVE-2026-41242")
+    check("memory", "the same advisory finds its exact precedent", any(p["id"] == cid and p["exact"] for p in a1b["precedents"]))
+    other = triage.run_triage("otel", "CVE-2026-41242")
+    check("memory", "tenant isolation: boutique memory is invisible to otel", not other["precedents"])
+    db.write(t, "MATCH (n) WHERE n:Case OR n:Run OR n:Step DETACH DELETE n")
+    db.write(t, "MATCH (p:Playbook) SET p.successes = 0, p.failures = 0")
+
+    for bad in ("MATCH (n) DETACH DELETE n", "CREATE (:X)", "MATCH (n) SET n.x = 1", "MERGE (:Y)"):
+        try:
+            db.read(t, bad)
+            ok = False
+        except db.UnsafeQuery:
+            ok = True
+        check("guardrails", f"read path rejects write query: {bad}", ok)
+    try:
+        db.graph(t).ro_query("CREATE (:Z)")
+        ok = False
+    except Exception:
+        ok = True
+    check("guardrails", "database itself rejects writes on the read-only path (defence in depth)", ok)
+    check("guardrails", "query timeout and row cap configured", db.config.QUERY_TIMEOUT_MS <= 3000 and db.config.MAX_ROWS <= 100)
+
+
+def main():
+    for t in TENANTS:
+        eval_tenant(t)
+    eval_scenarios()
+    passed = sum(1 for r in results if r[2])
+    lines = ["# Evaluation", "",
+             "Ground truth is computed **without the graph** (raw lockfiles, cached OSV data, curated call list, CODEOWNERS) "
+             "and compared with what the FalkorDB-backed product returns.", "",
+             f"**{passed}/{len(results)} checks passed.**", "", "| Group | Check | Result | Detail |", "|---|---|---|---|"]
+    for g, n, ok, d in results:
+        lines.append(f"| {g} | {n} | {'PASS' if ok else '**FAIL**'} | {d} |")
+    out = Path(__file__).resolve().parents[2] / "EVALS.md"
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print("\n".join(lines[4:5]))
+    for g, n, ok, d in results:
+        print(("PASS " if ok else "FAIL ") + f"[{g}] {n} {d}")
+    sys.exit(0 if passed == len(results) else 1)
+
+
+if __name__ == "__main__":
+    main()

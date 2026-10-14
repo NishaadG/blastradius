@@ -240,7 +240,7 @@ export default function Home() {
   return (
     <main className="relative flex h-dvh flex-col overflow-y-auto lg:block lg:overflow-hidden">
       {/* header */}
-      <header className="glass z-30 flex h-14 shrink-0 items-center gap-4 border-x-0 border-t-0 px-4 lg:absolute lg:inset-x-0 lg:top-0">
+      <header className="glass z-30 flex min-h-14 shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-x-0 border-t-0 px-4 py-2 lg:absolute lg:inset-x-0 lg:top-0 lg:h-14 lg:flex-nowrap lg:py-0">
         <div className="flex items-center gap-2.5">
           <Logo />
           <div className="leading-none">
@@ -255,7 +255,7 @@ export default function Home() {
               role="tab"
               aria-selected={tenant === t.id}
               onClick={() => switchTenant(t.id)}
-              className={clsx("rounded-md px-2.5 py-1 text-xs font-medium transition", tenant === t.id ? "bg-surface-2 text-fg shadow-sm" : "text-muted hover:text-fg")}
+              className={clsx("whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium transition", tenant === t.id ? "bg-surface-2 text-fg shadow-sm" : "text-muted hover:text-fg")}
             >
               {t.title}
             </button>
@@ -264,7 +264,7 @@ export default function Home() {
         <button
           onClick={() => (demo ? (cancelDemo.current = true) : playDemo())}
           className={clsx(
-            "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition",
+            "flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition",
             demo ? "border-bad/50 text-bad hover:bg-bad/10" : "border-accent/50 text-accent hover:bg-accent/10",
           )}
         >
