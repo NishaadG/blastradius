@@ -121,10 +121,28 @@ async function j<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
-  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  if (!r.ok) {
+    const body = await r.text();
+    let detail = body;
+    try {
+      detail = JSON.parse(body).detail ?? body;
+    } catch {
+      /* not json */
+    }
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
   return r.json();
 }
 const post = <T,>(p: string, body: unknown) => j<T>(p, { method: "POST", body: JSON.stringify(body) });
+
+export async function healthy(): Promise<boolean> {
+  try {
+    const r = await fetch(`${API}/api/health`, { cache: "no-store" });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
 
 export const api = {
   tenants: () => j<TenantInfo[]>("/api/tenants"),

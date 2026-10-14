@@ -2,13 +2,13 @@
 
 import clsx from "clsx";
 import { AnimatePresence, motion } from "framer-motion";
-import { Brain as BrainIcon, Building2, CornerDownLeft, Search, ShieldAlert, Sparkles, Waypoints, X } from "lucide-react";
+import { Brain as BrainIcon, Building2, CornerDownLeft, Play, Search, ShieldAlert, Sparkles, Square, Waypoints, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import GraphCanvas from "@/components/GraphCanvas";
 import ResultPanel from "@/components/ResultPanel";
 import { CompanyView, MemoryView, RiskBoard } from "@/components/Views";
 import { Pill, Spinner } from "@/components/ui";
-import { api, AskResult, Brain, GraphData, ID_RE, Risk, TenantInfo, TriageResult } from "@/lib/api";
+import { api, AskResult, Brain, GraphData, healthy, ID_RE, Risk, TenantInfo, TriageResult } from "@/lib/api";
 
 type Tab = "risk" | "memory" | "company";
 
@@ -61,13 +61,38 @@ export default function Home() {
     }).catch(() => setError("Cannot reach the Blastradius API. Is the backend running on :8000 and FalkorDB up?"));
   }, []);
 
+  const tenantRef = useRef(tenant);
   useEffect(() => {
+    tenantRef.current = tenant;
+  }, [tenant]);
+
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    let live = true;
+    const tick = async () => {
+      const ok = await healthy();
+      if (live) setOnline(ok);
+    };
+    tick();
+    const id = setInterval(tick, 3000);
+    return () => {
+      live = false;
+      clearInterval(id);
+    };
+  }, []);
+
+  const switchTenant = useCallback((id: string) => {
+    if (id === tenantRef.current) return; // same tenant: keep loaded data, nothing to refetch
+    setTenant(id);
     setResult(null);
     setAnswer(null);
     setSelected(null);
     setOverview(null);
     setRisk(null);
     setBrain(null);
+  }, []);
+
+  useEffect(() => {
     api.graph(tenant).then(setOverview).catch(() => {});
     refreshRisk(tenant);
     refreshBrain(tenant);
@@ -89,19 +114,22 @@ export default function Home() {
   }, []);
 
   const run = useCallback(
-    async (text: string) => {
+    async (text: string, forTenant?: string): Promise<TriageResult | null> => {
       const q = text.trim();
-      if (!q) return;
+      if (!q) return null;
+      const t = forTenant ?? tenant;
       setRunning(true);
       setError(null);
       setAnswer(null);
       inputRef.current?.blur();
       try {
         if (ID_RE.test(q) && q.split(/\s+/).length === 1) {
-          const r = await api.triage(tenant, q);
+          setInput(q);
+          const r = await api.triage(t, q);
           setResult(r);
           setReplayKey((k) => k + 1);
-          refreshBrain(tenant);
+          refreshBrain(t);
+          return r;
         } else {
           const a = await api.ask(tenant, q);
           setAnswer(a);
@@ -124,9 +152,77 @@ export default function Home() {
       } finally {
         setRunning(false);
       }
+      return null;
     },
     [tenant, refreshBrain, overview],
   );
+
+  /* ---------------------------------------------------------------- guided demo */
+  const [demo, setDemo] = useState<{ i: number; total: number; text: string } | null>(null);
+  const cancelDemo = useRef(false);
+
+  const playDemo = useCallback(async () => {
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const total = 8;
+    cancelDemo.current = false;
+    const say = async (i: number, text: string, ms: number) => {
+      if (cancelDemo.current) throw new Error("stopped");
+      setDemo({ i, total, text });
+      await sleep(ms);
+      if (cancelDemo.current) throw new Error("stopped");
+    };
+    try {
+      setTab("risk");
+      switchTenant("boutique");
+      await api.reset("boutique");
+      await sleep(1800);
+      await say(1, "A critical CVE lands: arbitrary code execution in protobufjs. Which of our services are exposed?", 2200);
+      const r1 = await run("CVE-2026-41242", "boutique");
+      await say(2, "The agent walks the graph: internet-exposed frontend → payment → gRPC loader → vulnerable protobufjs. A deterministic judge, not the LLM, decides.", 7000);
+      if (r1?.advisory) {
+        await say(3, "A human approves the fix. The decision is written back into the graph as episodic memory.", 1800);
+        await api.decide("boutique", {
+          advisory_id: r1.advisory.id, decision: "patched", rationale: `Approved fix: ${r1.actions[0]?.title ?? "upgrade"}`,
+          actor: "you", services: r1.services.map((s) => s.service), eco: "npm",
+        });
+        refreshBrain("boutique");
+        await sleep(1400);
+      }
+      await say(4, "Days later, a different protobufjs advisory arrives.", 1800);
+      await run("CVE-2026-48712", "boutique");
+      await say(4, "Memory kicks in: the agent cites the earlier case, found by traversal (advisory → package → case), and reuses the playbook.", 7000);
+      setTab("memory");
+      await say(5, "Cases, reuse counts and playbook success rates all live in the same FalkorDB graph.", 4500);
+      setTab("risk");
+      await run("GHSA-jfh8-c2jp-5v3q", "boutique");
+      await say(6, "Log4Shell? Proven not affected: the traversal returns zero paths. Absence of a path is evidence.", 6000);
+      setResult(null);
+      setTab("company");
+      setSelected("paymentservice");
+      await say(7, "Company brain: owners, expertise and decisions, each traced to a source commit.", 5500);
+      setSelected(null);
+      setTab("memory");
+      switchTenant("otel");
+      await say(8, "Each tenant is its own FalkorDB graph. OpenTelemetry's memory is empty: nothing leaks across tenants.", 6000);
+    } catch {
+      /* stopped */
+    } finally {
+      setDemo(null);
+    }
+  }, [run, refreshBrain, switchTenant]);
+
+  const autoStarted = useRef(false);
+  const playRef = useRef(playDemo);
+  useEffect(() => {
+    playRef.current = playDemo;
+  });
+  useEffect(() => {
+    if (autoStarted.current) return;
+    if (new URLSearchParams(window.location.search).get("demo") === "1") {
+      autoStarted.current = true;
+      setTimeout(() => playRef.current(), 1500);
+    }
+  }, []);
 
   const samples = useMemo(() => {
     const top = (risk?.advisories ?? []).filter((a) => a.priority === "P0").slice(0, 3);
@@ -139,7 +235,7 @@ export default function Home() {
   const current = tenants.find((t) => t.id === tenant);
   const nodeCount = current ? Object.values(current.nodes).reduce((a, b) => a + b, 0) : 0;
   const edgeCount = current ? Object.values(current.edges).reduce((a, b) => a + b, 0) : 0;
-  const healthy = tenants.length > 0;
+  const isUp = online && tenants.length > 0;
 
   return (
     <main className="relative flex h-dvh flex-col overflow-y-auto lg:block lg:overflow-hidden">
@@ -158,17 +254,26 @@ export default function Home() {
               key={t.id}
               role="tab"
               aria-selected={tenant === t.id}
-              onClick={() => setTenant(t.id)}
+              onClick={() => switchTenant(t.id)}
               className={clsx("rounded-md px-2.5 py-1 text-xs font-medium transition", tenant === t.id ? "bg-surface-2 text-fg shadow-sm" : "text-muted hover:text-fg")}
             >
               {t.title}
             </button>
           ))}
         </div>
+        <button
+          onClick={() => (demo ? (cancelDemo.current = true) : playDemo())}
+          className={clsx(
+            "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition",
+            demo ? "border-bad/50 text-bad hover:bg-bad/10" : "border-accent/50 text-accent hover:bg-accent/10",
+          )}
+        >
+          {demo ? <><Square className="h-3 w-3" /> Stop demo</> : <><Play className="h-3 w-3" /> Guided demo</>}
+        </button>
         <div className="ml-auto hidden items-center gap-3 md:flex">
-          <Pill tone={healthy ? "good" : "bad"} className="gap-1.5 py-1">
-            <span className={clsx("h-1.5 w-1.5 rounded-full", healthy ? "bg-good" : "bg-bad")} />
-            FalkorDB · {nodeCount.toLocaleString()} nodes · {edgeCount.toLocaleString()} edges
+          <Pill tone={isUp ? "good" : "bad"} className="gap-1.5 py-1">
+            <span className={clsx("h-1.5 w-1.5 rounded-full", isUp ? "bg-good" : "bg-bad animate-pulse")} />
+            {isUp ? `FalkorDB · ${nodeCount.toLocaleString()} nodes · ${edgeCount.toLocaleString()} edges` : "FalkorDB offline"}
           </Pill>
           <span className="text-[11px] text-faint">graph isolated per tenant</span>
         </div>
@@ -186,6 +291,47 @@ export default function Home() {
           <span className="text-faint">{result ? "dependency chain, hop by hop" : "node size = PageRank"}</span>
         </div>
       </div>
+
+      {/* graph-down banner: proves the graph is load-bearing */}
+      <AnimatePresence>
+        {!online && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="glass fixed left-1/2 top-[40vh] z-50 w-[min(520px,calc(100%-2rem))] -translate-x-1/2 rounded-2xl border-bad/60 px-5 py-4 text-center lg:left-[calc(50%+8px)]"
+            role="alert"
+          >
+            <div className="text-sm font-semibold text-bad">FalkorDB is offline</div>
+            <p className="mt-1 text-xs leading-snug text-muted">
+              Blastradius has nothing to say without the graph. Every verdict is a traversal, so there is no fallback and no cached answer.
+              Bring the database back and it resumes instantly.
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* guided-demo caption */}
+      <AnimatePresence>
+        {demo && (
+          <motion.div
+            key="caption"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            className="glass fixed bottom-16 left-1/2 z-40 w-[min(720px,calc(100%-2rem))] -translate-x-1/2 rounded-2xl border-accent/40 px-5 py-3.5 lg:bottom-14 lg:left-[calc(50%+8px)]"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-center gap-1.5">
+              {Array.from({ length: demo.total }).map((_, k) => (
+                <span key={k} className={clsx("h-1 flex-1 rounded-full", k < demo.i ? "bg-accent" : "bg-line-strong")} />
+              ))}
+            </div>
+            <p className="mt-2.5 text-[15px] font-medium leading-snug">{demo.text}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* command bar */}
       <div className="relative z-20 mx-auto w-full max-w-[640px] px-4 pt-3 lg:absolute lg:left-1/2 lg:top-[68px] lg:-translate-x-1/2 lg:pt-0">
@@ -225,7 +371,7 @@ export default function Home() {
           )}
         </AnimatePresence>
         <AnimatePresence>
-          {(answer || error) && (
+          {(answer || (error && online)) && (
             <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               className={clsx("glass mt-2 rounded-2xl p-3.5 text-sm", error && "border-bad/50")}>
               <div className="flex items-start gap-2">

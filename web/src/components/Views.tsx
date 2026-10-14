@@ -141,25 +141,23 @@ export function CompanyView({
   selected: string | null;
   onSelect: (s: string) => void;
 }) {
-  const [card, setCard] = useState<ServiceCard | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState<{ key: string; card: ServiceCard } | null>(null);
 
   useEffect(() => {
-    if (!selected) {
-      setCard(null);
-      setLoading(false);
-      return;
-    }
+    if (!selected) return;
     let live = true;
-    setLoading(true);
     api
       .service(tenant, selected)
-      .then((c) => live && setCard(c))
-      .finally(() => live && setLoading(false));
+      .then((c) => live && setLoaded({ key: `${tenant}/${selected}`, card: c }))
+      .catch(() => {});
     return () => {
       live = false;
     };
   }, [tenant, selected]);
+
+  // derived: a card is only shown if it belongs to the current tenant + selection
+  const card = selected && loaded?.key === `${tenant}/${selected}` ? loaded.card : null;
+  const loading = !!selected && !card;
 
   const services = [...(overview?.nodes ?? [])].sort((a, b) => b.centrality - a.centrality);
   const humans = card?.experts.filter((e) => e.kind !== "bot") ?? [];
@@ -190,7 +188,7 @@ export function CompanyView({
               <Label>Owners · CODEOWNERS</Label>
               <div className="flex flex-wrap gap-1.5">
                 {card.owners.length ? card.owners.map((o) => (
-                  <Pill key={o.owner} tone={o.kind === "team" ? "violet" : "neutral"} className="max-w-full !leading-tight break-all py-1">
+                  <Pill key={o.owner} tone={o.kind === "team" ? "violet" : "neutral"} className="max-w-full !leading-tight [overflow-wrap:anywhere] py-1">
                     <User className="h-3 w-3 shrink-0" /> {o.owner}
                   </Pill>
                 )) : <span className="text-xs text-muted">No CODEOWNERS entry. Nobody is accountable.</span>}
@@ -206,7 +204,7 @@ export function CompanyView({
                     <span className="mono ml-auto text-faint">{e.commits} commits</span>
                   </div>
                 ))}
-                {humans.length === 0 && <span className="text-xs text-muted">No human commits to this service's manifest. It is maintained by automation.</span>}
+                {humans.length === 0 && <span className="text-xs text-muted">No human commits to this service&apos;s manifest. It is maintained by automation.</span>}
                 {bots.map((e) => (
                   <div key={e.name} className="flex items-center gap-2 text-xs text-muted">
                     <Bot className="h-3 w-3" /> {e.name}

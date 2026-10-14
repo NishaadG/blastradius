@@ -48,7 +48,6 @@ const STYLE = [
       shape: "round-rectangle",
       width: "data(w)",
       height: 32,
-      "text-halign": "center",
       "text-valign": "center",
       "text-halign": "center",
       "border-color": "#3b4a63",
@@ -176,9 +175,11 @@ export default function GraphCanvas({ overview, focus, replayKey, panelOpen, sel
   const cy = useRef<Core | null>(null);
   const timers = useRef<number[]>([]);
   const onSelectRef = useRef(onSelect);
-  onSelectRef.current = onSelect;
   const hasFocus = useRef(false);
-  hasFocus.current = panelOpen;
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+    hasFocus.current = panelOpen;
+  });
 
   useEffect(() => {
     if (!host.current) return;

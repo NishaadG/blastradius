@@ -1,12 +1,20 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from redis.exceptions import RedisError
 
 from . import agent, db, memory, queries as q, triage
 from .tenants import TENANTS
 
 app = FastAPI(title="Blastradius API", version="1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+@app.exception_handler(RedisError)
+async def graph_down(_, exc: RedisError):
+    # No fallback on purpose: every verdict is a graph traversal, so without FalkorDB there is nothing to say.
+    return JSONResponse(status_code=503, content={"detail": f"FalkorDB unavailable: {exc}"})
 
 
 def _tenant(t: str) -> str:
@@ -17,10 +25,7 @@ def _tenant(t: str) -> str:
 
 @app.get("/api/health")
 def health():
-    try:
-        return {"ok": True, "graphs": db.tenants_present()}
-    except Exception as e:  # DB down: the product has nothing to say, and says so
-        raise HTTPException(503, f"FalkorDB unavailable: {e}")
+    return {"ok": True, "graphs": db.tenants_present()}  # raises RedisError -> 503 when the graph is down
 
 
 @app.get("/api/tenants")
