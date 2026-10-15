@@ -1,56 +1,88 @@
-"""OSV.dev client (free, no auth) with an on-disk cache."""
+"""OSV.dev client (free, no auth). Results are cached: a committed snapshot (read-only) plus a writable cache."""
 import json
+import re
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 
-from .config import DATA_DIR
+from .config import CACHE_DIR, SNAPSHOT_DIR
 
 OSV = "https://api.osv.dev/v1"
-CACHE = DATA_DIR / "osv_cache.json"
+REL = "osv_cache.json"
+_lock = threading.Lock()
+_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{2,63}$")
+
+
+def valid_id(ident: str) -> bool:
+    """Advisory identifiers only: anything else never reaches the OSV URL path."""
+    return bool(_ID.match(ident or ""))
 
 
 def _load():
-    if CACHE.exists():
-        return json.loads(CACHE.read_text(encoding="utf-8"))
-    return {"queries": {}, "vulns": {}}
+    c = {"queries": {}, "vulns": {}}
+    for base in (SNAPSHOT_DIR, CACHE_DIR):  # the writable cache overrides the snapshot
+        p = base / REL
+        if p.exists():
+            d = json.loads(p.read_text(encoding="utf-8"))
+            c["queries"].update(d.get("queries", {}))
+            c["vulns"].update(d.get("vulns", {}))
+    return c
 
 
 def _save(c):
-    CACHE.write_text(json.dumps(c), encoding="utf-8")
+    (CACHE_DIR / REL).write_text(json.dumps(c), encoding="utf-8")
+
+
+def _post(cli: httpx.Client, url: str, body: dict, tries: int = 3):
+    for i in range(tries):
+        r = cli.post(url, json=body)
+        if r.status_code == 429 or r.status_code >= 500:
+            time.sleep(1.5 * (i + 1))
+            continue
+        r.raise_for_status()
+        return r.json()
+    r.raise_for_status()
 
 
 def query_packages(pkgs: dict) -> dict:
     """pkgs: {key: {eco,name,version}} -> {key: [vuln ids]} using querybatch."""
-    cache = _load()
+    with _lock:
+        cache = _load()
     todo = [k for k in pkgs if k not in cache["queries"]]
     with httpx.Client(timeout=60) as cli:
         for i in range(0, len(todo), 500):
             chunk = todo[i:i + 500]
             body = {"queries": [{"package": {"name": pkgs[k]["name"], "ecosystem": pkgs[k]["eco"]},
                                  "version": pkgs[k]["version"]} for k in chunk]}
-            r = cli.post(f"{OSV}/querybatch", json=body)
-            r.raise_for_status()
-            for k, res in zip(chunk, r.json()["results"]):
+            data = _post(cli, f"{OSV}/querybatch", body)
+            for k, res in zip(chunk, data["results"]):
                 cache["queries"][k] = [v["id"] for v in res.get("vulns", [])]
-    _save(cache)
+    if todo:
+        with _lock:
+            _save(cache)
     return {k: cache["queries"][k] for k in pkgs}
 
 
 def fetch_vulns(ids) -> dict:
-    cache = _load()
-    todo = [i for i in set(ids) if i not in cache["vulns"]]
+    ids = [i for i in dict.fromkeys(ids) if valid_id(i)]
+    with _lock:
+        cache = _load()
+    todo = [i for i in ids if i not in cache["vulns"]]
 
     def get(vid):
-        with httpx.Client(timeout=60) as cli:
+        with httpx.Client(timeout=30) as cli:
             r = cli.get(f"{OSV}/vulns/{vid}")
             return vid, (r.json() if r.status_code == 200 else None)
 
-    with ThreadPoolExecutor(8) as ex:
-        for vid, data in ex.map(get, todo):
-            if data:
-                cache["vulns"][vid] = data
-    _save(cache)
+    if todo:
+        with ThreadPoolExecutor(8) as ex:
+            for vid, data in ex.map(get, todo):
+                if data:
+                    cache["vulns"][vid] = data
+        with _lock:
+            _save(cache)
     return {i: cache["vulns"][i] for i in ids if i in cache["vulns"]}
 
 

@@ -97,12 +97,17 @@ def _subgraph(tenant, paths, callpaths):
 def risk_board(tenant: str) -> dict:
     """All advisories ranked by deterministic priority; one traversal sweep + cached exposure lookups."""
     findings, tr = q.all_findings(tenant)
+    known = q.tenant_meta(tenant)["exposure_known"]
     exp_cache: dict[str, bool] = {}
     adv: dict[str, dict] = {}
     for f in findings:
         if f["service"] not in exp_cache:
-            ep, _ = q.exposure_path(tenant, f["service"])
-            exp_cache[f["service"]] = bool(ep) or f["exposed"]
+            if known:
+                ep, _ = q.exposure_path(tenant, f["service"])
+                exp_cache[f["service"]] = bool(ep) or f["exposed"]
+            else:
+                exp_cache[f["service"]] = True  # unknown topology: assume the worst
+
         a = adv.setdefault(f["id"], {"id": f["id"], "cve": f["cve"], "severity": f["severity"], "summary": f["summary"],
                                      "services": {}, "packages": set(), "exposed": False, "prod": False, "fixed": set()})
         a["services"][f["service"]] = a["services"].get(f["service"], False) or not f["dev"]
@@ -123,9 +128,11 @@ def risk_board(tenant: str) -> dict:
     return {"advisories": out, "summary": summary, "trace": tr}
 
 
-def run_triage(tenant: str, ident: str) -> dict:
+def run_triage(tenant: str, ident: str, sid: str = memory.DEFAULT_SID, record: bool = True) -> dict:
+    """record=False leaves no trace in the graph (read-only callers such as the public MCP endpoint)."""
     t0 = time.perf_counter()
     steps: list[dict] = []
+    exposure_known = q.tenant_meta(tenant)["exposure_known"]
     adv, tr = q.find_advisory(tenant, ident)
     _step(steps, "Triage", "find_advisory",
           f"Resolved '{ident}' -> {adv['id']} ({adv['severity']})" if adv else f"'{ident}' not in graph", tr)
@@ -151,16 +158,17 @@ def run_triage(tenant: str, ident: str) -> dict:
             callers, tr1 = q.upstream_callers(tenant, name)
             ep, tr2 = q.exposure_path(tenant, name)
             own, tr3 = q.owners(tenant, name)
-            sv.update(callers=callers, exposure_path=ep, owners=own,
-                      exposed=bool(ep) or sv["exposed_direct"])
-            _step(steps, "Investigator", "blast_radius",
-                  f"{name}: {len(callers)} upstream caller(s); "
-                  + (f"internet-exposed via {' -> '.join(ep)}" if ep else "not reachable from an exposed entry point"),
-                  [tr1, tr2, tr3])
+            sv.update(callers=callers, exposure_path=ep, owners=own, exposure_unknown=not exposure_known,
+                      exposed=bool(ep) or sv["exposed_direct"] or not exposure_known)
+            if exposure_known:
+                what = f"internet-exposed via {' -> '.join(ep)}" if ep else "not reachable from an exposed entry point"
+            else:
+                what = "exposure unknown (no deployment topology), assumed reachable"
+            _step(steps, "Investigator", "blast_radius", f"{name}: {len(callers)} upstream caller(s); {what}", [tr1, tr2, tr3])
             if ep and len(ep) > 1:
                 callpaths.append(ep)
         pkg_names = {p["pkg"] for p in paths}
-        precedents, tr = memory.find_precedents(tenant, adv["id"], pkg_names)
+        precedents, tr = memory.find_precedents(tenant, adv["id"], pkg_names, sid)
         _step(steps, "Investigator", "find_precedents",
               f"{len(precedents)} relevant prior case(s) in memory", tr)
 
@@ -177,8 +185,11 @@ def run_triage(tenant: str, ident: str) -> dict:
             exposed = any(s["exposed"] for s in prod)
             verdict, reason = "AFFECTED", "reachable_runtime_dependency"
             names = ", ".join(s["service"] for s in prod)
-            headline = (f"Reaches {names} through a runtime dependency. "
-                        + ("Reachable from an internet-exposed entry point." if exposed else "Not reachable from the internet."))
+            if not exposure_known:
+                tail = "Exposure is unknown for this repository, so it is assumed reachable."
+            else:
+                tail = "Reachable from an internet-exposed entry point." if exposed else "Not reachable from the internet."
+            headline = f"Reaches {names} through a runtime dependency. {tail}"
         else:
             verdict, reason = "NEEDS_HUMAN", "dev_only_dependency"
             headline = "Only dev-time dependency paths exist; confirm it is not shipped to production."
@@ -215,10 +226,12 @@ def run_triage(tenant: str, ident: str) -> dict:
         sub = _subgraph(tenant, [p for s in prod or services for p in s["paths"]], callpaths)
         result = {"verdict": verdict, "reason": reason, "priority": prio, "headline": headline, "advisory": adv,
                   "services": services, "precedents": precedents, "actions": actions, "subgraph": sub}
-        memory.mark_reused(tenant, [c["id"] for c in precedents])
+        if record:
+            memory.mark_reused(tenant, [c["id"] for c in precedents])
 
     run_id = f"run-{uuid.uuid4().hex[:8]}"
-    memory.save_run(tenant, run_id, ident, result["verdict"], steps)
-    result.update(run_id=run_id, tenant=tenant, ident=ident, steps=steps,
+    if record:
+        memory.save_run(tenant, run_id, ident, result["verdict"], steps, sid)
+    result.update(run_id=run_id, exposure_known=exposure_known, tenant=tenant, ident=ident, steps=steps,
                   total_ms=round((time.perf_counter() - t0) * 1000, 1))
     return result

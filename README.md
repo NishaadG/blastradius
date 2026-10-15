@@ -1,27 +1,36 @@
 # Blastradius
 
 **A supply-chain vulnerability triage agent whose brain is a FalkorDB graph.**
-A new CVE drops. Blastradius answers: *are we affected, through which path, who owns it, what did we decide last time, and what should we do?* Every answer is a graph traversal you can see, and the product stops working if you turn FalkorDB off.
+A new CVE drops. Blastradius answers: *are we affected, through which dependency path, who owns it, what did we decide last time, and what should we do?* Every answer is a graph traversal you can see, and the product stops working if you turn FalkorDB off.
 
 Built for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB), entering **all three tracks**.
-
-| Track | What Blastradius does |
-|---|---|
-| 1 · Agents That Act on Connected Data | Multi-hop traversals (`service → package → … → vulnerable package`), blast radius over the service call graph, PageRank exposure, a deterministic judge, and **human-gated** action proposals. |
-| 2 · Agent Memory & Coordination | Episodic cases, procedural playbooks with success counts, three agents (Triage → Investigator → Remediator) handing off through graph state, and **one graph per tenant** for hard isolation. |
-| 3 · Company Brain | Ownership from CODEOWNERS, expertise from commit history, dependency decisions **traced to the source commit**, `SUPERSEDES` edges marking stale knowledge. |
 
 ![Blastradius triage of a critical protobufjs advisory: red attack path from the exposed frontend down to the vulnerable package, with the case file on the right](docs/img/triage.png)
 
 <sub>A critical advisory traced hop by hop from the internet-exposed frontend to the vulnerable package. The right column is the case file: verdict, blast radius, owners, precedent, gated actions and every Cypher query. Light and dark themes follow your OS.</sub>
 
+| Track | What Blastradius does |
+|---|---|
+| 1 · Agents That Act on Connected Data | Multi-hop traversals (`service → package → … → vulnerable package`), blast radius over a service call graph **discovered from the project's own Kubernetes/Compose files**, PageRank, a deterministic judge, human-gated action proposals, an **MCP server** and an LLM tool loop. |
+| 2 · Agent Memory & Coordination | Episodic cases, procedural playbooks with derived success counts, three agents handing off through graph state, **one graph per tenant** and **per-session memory isolation**, plus a [concurrency benchmark](BENCH.md). |
+| 3 · Company Brain | Ownership from CODEOWNERS, human expertise from commit history, dependency decisions **traced to the source commit**, `SUPERSEDES` edges marking stale knowledge. |
+
 ## Why a graph (and not a vector DB)
-The question *"does this CVE reach production?"* is a path query: advisory → package → dependency chain → service → caller chain → internet-exposed entry point. A similarity search can't prove a path exists, and it certainly can't prove one doesn't. With a graph, **"no path found" is evidence**, which is how Blastradius proves Log4Shell does not affect a Node/Go/Python stack.
+*"Does this CVE reach production?"* is a path query: advisory → package → dependency chain → service → caller chain → internet-exposed entry point. A similarity search can't prove a path exists, and it can't prove one doesn't. In a graph **"no path found" is evidence**, which is how Blastradius proves Log4Shell does not affect a Node/Go/Python stack, and how it finds it in a Java one through a dependency the manifest never names.
 
-## Try it in 60 seconds
-Open the app and click **Guided demo**. It plays the whole story with captions: critical CVE → animated traversal → human approval → memory → the next advisory cites the precedent → proof by absence → company brain → tenant isolation.
+## What you can do
+- **Guided demo.** One button plays the whole story with captions: critical CVE → animated traversal → approval → memory → the next advisory cites the precedent → proof by absence → company brain → tenant isolation.
+- **Analyse any public GitHub repo.** Paste `owner/name`. Blastradius finds the manifests (`package-lock.json`, `go.mod`, `requirements.txt`, `pom.xml`, `build.gradle`, `Cargo.lock`), **resolves transitive dependencies through [deps.dev](https://deps.dev)** when the manifest only lists direct ones, queries [OSV](https://osv.dev) and builds a tenant graph. Try `christophetd/log4shell-vulnerable-app`: it finds Log4Shell through `app → spring-boot-starter-log4j2 → log4j-core@2.14.1`, a path no manifest parser can see.
+- **Ask from your own AI client (MCP).** Point any MCP client at the hosted `https://<host>/mcp` (read-only), or run it locally over stdio. For Claude Desktop / Claude Code add:
+  ```json
+  { "mcpServers": { "blastradius": { "command": "<repo>/backend/.venv/Scripts/python.exe",
+                                     "args": ["-m", "blastradius.mcp_server"], "cwd": "<repo>/backend" } } }
+  ```
+  Tools: `list_tenants`, `risk_board`, `triage_advisory`, `blast_radius`, `who_owns`, `service_brain`, and `record_decision` (local only; it is not registered on a public server).
+- **Chat.** A tool-calling loop on a free Gemini key (`GEMINI_API_KEY`); with no key a deterministic router answers the same tools, so everything works at $0.
+- **Stress it.** The Memory tab runs 10/50/100 concurrent agents against shared graph memory.
 
-## Run it ($0, no accounts)
+## Run it locally ($0, no accounts, works offline)
 Requirements: Docker, Python 3.12+, Node 20+.
 
 ```bash
@@ -30,47 +39,52 @@ docker compose up -d falkordb                      # FalkorDB (browser UI on :30
 cd backend
 python -m venv .venv && .venv/Scripts/activate     # or: source .venv/bin/activate
 pip install -r requirements.txt
-python -m blastradius.build                        # builds both tenant graphs from public data (~1 min)
+python -m blastradius.build                        # builds both tenant graphs from the committed snapshot (offline, under a minute)
 uvicorn blastradius.api:app --port 8000
 
-cd ../web && npm install && npm run dev -- -p 3001 # http://localhost:3001
+cd ../web && npm install
+echo NEXT_PUBLIC_API=http://localhost:8000 > .env.local
+npm run dev -- -p 3001                             # http://localhost:3001
 ```
-Or everything in containers: `docker compose --profile seed run --rm seed && docker compose up -d --build`.
+Everything in containers: `docker compose --profile seed run --rm seed && docker compose up -d --build`.
 
-Optional: `GEMINI_API_KEY` (free tier) lets an LLM choose tools and phrase answers. Without it a deterministic router answers the same tools, so the app works with **no LLM and no cost**. Optional `GITHUB_TOKEN` lifts the anonymous GitHub API rate limit during ingestion.
+The data (lockfiles, deployment manifests, OSV results, commit metadata) is committed in [`backend/snapshot`](backend/snapshot) so graphs rebuild identically with no network; `python -m blastradius.build --snapshot` refreshes it after a networked build.
 
 ## Architecture
 ```mermaid
 flowchart LR
   subgraph Public data
-    L[Lockfiles: package-lock.json, go.mod, requirements.txt]
+    L[Lockfiles + manifests]
+    D[Compose / Kubernetes files]
     O[OSV.dev advisories]
+    X[deps.dev resolved trees]
     C[CODEOWNERS + commit history]
   end
-  L & O & C --> I[Idempotent ingestion]
+  L & D & O & X & C --> I[Idempotent ingestion]
   I --> G[(FalkorDB<br/>one graph per tenant)]
-  G <--> T[Cypher tool layer<br/>read-only · 3s timeout · 100-row cap]
+  G <--> T[Toolkit: validated, read-only<br/>3s timeout · 100-row cap]
   T --> J[Deterministic judge<br/>no LLM]
   T --> A[Agents: Triage → Investigator → Remediator]
   J --> A
-  A -->|writes cases, playbooks, handoffs| G
-  A --> UI[Next.js UI<br/>animated path · Cypher panel · approvals]
-  LLM[Optional free-tier LLM<br/>picks tools, phrases answers] -.-> A
+  A -->|cases, playbooks, handoffs per session| G
+  T --> M[MCP server<br/>stdio + HTTP]
+  T --> UI[Next.js UI<br/>animated path · Cypher panel · approvals]
+  LLM[Optional free-tier LLM<br/>picks tools, phrases answers] -.-> T
 ```
-The LLM never sees a database credential and never writes Cypher. It can choose a tool and phrase the result; it **cannot change a verdict**. The verdict (`AFFECTED / NOT_AFFECTED / NEEDS_HUMAN`) is computed from graph evidence by plain rules in [`triage.py`](backend/blastradius/triage.py).
+The LLM never sees a database credential and never writes Cypher. It can pick a tool and phrase the result; it **cannot change a verdict**. The verdict (`AFFECTED / NOT_AFFECTED / NEEDS_HUMAN`) comes from plain rules in [`triage.py`](backend/blastradius/triage.py).
 
 ## Graph data model
 ```
-(Repo)-[:CONTAINS]->(Service)-[:CALLS]->(Service)
+(Meta)  tenant title, repo, exposure_known, built_at
+(Repo)-[:CONTAINS]->(Service)-[:CALLS]->(Service)               // CALLS and exposure are DISCOVERED from deployment files
 (Service)-[:DEPENDS_ON {direct, dev}]->(Package)-[:DEPENDS_ON {dev}]->(Package)
 (Advisory)-[:AFFECTS {fixed}]->(Package)        (Alias)-[:ALIAS_OF]->(Advisory)   // CVE-… ⇄ GHSA-…
-(Owner {kind: team|person|bot})-[:OWNS]->(Service)
-(Owner)-[:COMMITTED {count,last}]->(Service)
+(Owner {kind: team|person|bot})-[:OWNS]->(Service) ; (Owner)-[:COMMITTED {count,last}]->(Service)
 (Commit)-[:TOUCHED]->(Service)
 (Decision)-[:DOCUMENTED_IN]->(Commit) ; (Decision)-[:CONCERNS]->(Service|Package) ; (Decision)-[:SUPERSEDES]->(Decision)
--- memory, written by the agents --
-(Case {decision, rationale, actor, ts, reused})-[:ABOUT]->(Advisory) ; (Case)-[:IN]->(Service) ; (Case)-[:USED]->(Playbook {successes, failures})
-(Run)-[:HAS_STEP]->(Step {agent, tool, summary, ms}) ; (Step)-[:HANDS_OFF_TO]->(Step)
+-- memory, written by the agents, scoped by session --
+(Case {sid, decision, rationale, actor, ts, reused})-[:ABOUT]->(Advisory) ; (Case)-[:IN]->(Service) ; (Case)-[:USED]->(Playbook)
+(Run {sid})-[:HAS_STEP]->(Step {agent, tool, summary, ms}) ; (Step)-[:HANDS_OFF_TO]->(Step)
 ```
 
 ## The Cypher the product depends on
@@ -82,32 +96,64 @@ All in [`queries.py`](backend/blastradius/queries.py) and [`memory.py`](backend/
 | Blast radius / who calls this | variable-length `(c:Service)-[:CALLS*0..6]->(s)` |
 | Is it reachable from the internet? | `shortestPath` from `Service {exposed:true}` over `CALLS` |
 | Which services matter most | `CALL algo.pageRank('Service','CALLS')` |
-| Precedent from memory | 3-hop `(Case)-[:ABOUT]->(Advisory)-[:AFFECTS]->(Package)` matched by package name across advisories |
+| Precedent from memory | 3-hop `(Case)-[:ABOUT]->(Advisory)-[:AFFECTS]->(Package)` matched by package name, scoped to the session |
 | Proof by absence / version outside range | empty traversal, plus `Package` presence by name to explain *why* |
 | Ownership, expertise, decisions | `OWNS`, `COMMITTED`, `Decision-[:DOCUMENTED_IN]->Commit` with `SUPERSEDES` for staleness |
 
-## Does it work? [EVALS.md](EVALS.md)
-`python -m evals.run` recomputes ground truth **without the graph** (raw lockfiles, cached OSV data, the curated call list, CODEOWNERS) and compares it with the product's answers: affected-service sets and verdicts for every advisory, path validity (every hop is a real lockfile edge), exposure distance, ownership, transitive callers, proof-by-absence, memory reuse, tenant isolation and guardrails. Currently **27/27**. Plus 10 unit tests on a hand-built fixture graph (`pytest backend/tests`).
+## Does it work? [EVALS.md](EVALS.md) · [BENCH.md](BENCH.md)
+- `python -m evals.run` recomputes ground truth **without the graph** and compares it with the product: affected-service sets and verdicts for every advisory, that every returned path is a real chain of lockfile edges, exposure distances over the discovered topology, ownership, transitive callers, memory reuse, tenant **and session** isolation, and guardrails. Currently **35/35**.
+- **Discovery is cross-checked** against the hand-written call lists from the projects' docs: 100% recall on OpenTelemetry (plus 7 calls only the deployment files reveal) and 94% on Online Boutique. The one edge it misses (`shoppingassistantservice → productcatalogservice`) is in no deployment file; EVALS.md reports it rather than hiding it.
+- `pytest backend/tests`: **30 tests**: parsers, discovery, MCP over stdio, the LLM loop against a mock model, repo analysis (network mocked, including a Log4Shell found only through a transitive dependency), validation, rate limiting, session isolation and backpressure.
+- [BENCH.md](BENCH.md): 10/50/100 concurrent agents on shared memory. Reads stay fast; writes queue (FalkorDB serialises them); the client retries on backpressure and counts every retry.
 
-## Guardrails
-- Agent read path: write keywords rejected, `GRAPH.RO_QUERY` (the database also refuses writes), 3 s timeout, 100-row cap.
-- Remediation actions are *proposals*: nothing is executed; approval records the decision as memory.
-- Unknown identifiers go to `NEEDS_HUMAN`, never a guess. Dev-only dependency paths go to `NEEDS_HUMAN`.
-- If FalkorDB is down the UI says so and nothing answers: there is no cache and no fallback, by design.
+## Security model (public deployment)
+| Risk | Control |
+|---|---|
+| LLM or caller runs arbitrary Cypher | No Cypher is exposed. The agent and MCP only call validated toolkit functions; the read path rejects write keywords **and** uses `GRAPH.RO_QUERY` (the database refuses writes); 3 s timeout, 100-row cap |
+| Prompt injection via advisory text | Tool results are treated as data in the system prompt; every tool is read-only and argument-validated; tenant is fixed server-side; no write tool exists on a public server |
+| One visitor wipes or reads another's memory | Memory carries a session id (`X-Session`); precedents, counts and reset are all scoped to it |
+| SSRF / path tricks | Advisory ids must match a strict pattern before they reach any URL; repos must match `owner/name`; only `api.github.com`, `raw.githubusercontent.com`, `api.osv.dev`, `api.deps.dev` are ever contacted |
+| Abuse / cost | Per-client rate limits (general, heavy, benchmark, repo analysis 3/hour), one analysis at a time with a 150 s deadline, ≤15 manifests and ≤20k packages per repo, ≤8 analysed tenants kept (oldest evicted), memory retention caps, 20 KB request bodies |
+| Database exposure | FalkorDB has no published port, requires a password, and sits on an internal network behind Caddy (automatic HTTPS, HSTS) |
+| Information leakage | Generic 500s, OpenAPI/docs disabled in public mode, no stack traces, no CORS grants |
+| Secrets | None in the repo; the Gemini key and DB password are server-side env vars |
+| Supply chain of this app | Version-pinned database image and bounded dependency ranges; non-root app containers; SSH restricted to the deployer's IP; IMDSv2 required on EC2 |
+
+## Hosted demo vs running it yourself
+The hosted instance is a small shared server: public repos only, limits as above, and analysed repos have **no deployment topology, so exposure is unknown and every service is assumed internet-reachable** (the conservative choice). **The better way to use Blastradius on your own code is to clone this repository and run it locally** (above): no limits, your data stays on your machine, and you can point `compose`/Kubernetes discovery at your own deployment files.
+
+## Deploy to AWS
+```powershell
+aws login                                  # once
+./deploy/aws/provision.ps1                 # EC2 t3.small, Ubuntu 24.04, Docker, Caddy HTTPS on <ip>.sslip.io (~10 min)
+node tools/probe.mjs https://<host>        # 14 outsider checks against the live site
+./deploy/aws/update.ps1                    # ship a new push
+./deploy/aws/teardown.ps1                  # remove everything, stop all charges
+```
+`deploy/docker-compose.prod.yml` is the same stack for any Docker host.
 
 ## Data & rules compliance
-Only public data: OSV.dev advisories, the public lockfiles / `CODEOWNERS` / commit metadata of two open-source projects ([open-telemetry/opentelemetry-demo](https://github.com/open-telemetry/opentelemetry-demo), [GoogleCloudPlatform/microservices-demo](https://github.com/GoogleCloudPlatform/microservices-demo)) treated as two "companies" (tenants). Service-to-service `CALLS` edges are curated from those projects' public architecture docs. Contributor info is limited to public GitHub handles in commit metadata; bots are labelled as bots. No private, paywalled or personal data. The advisory set is a snapshot as of ingestion time.
+Only public data: OSV.dev and deps.dev, plus the public lockfiles, deployment files, `CODEOWNERS` and commit metadata of two open-source projects ([open-telemetry/opentelemetry-demo](https://github.com/open-telemetry/opentelemetry-demo), [GoogleCloudPlatform/microservices-demo](https://github.com/GoogleCloudPlatform/microservices-demo)) treated as two "companies" (tenants). Contributor info is limited to public GitHub handles in commit metadata; bots are labelled as bots. No private, paywalled or personal data. The advisory set is a snapshot as of ingestion time. FalkorDB is the primary and only store.
 
 ## AI assistance disclosure
-This project was built with **Claude Code** as a coding assistant (Anthropic), directed and reviewed by the author. The graph model, queries, deterministic-judge rules, guardrails and evals were designed to be explainable end to end; the eval suite exists specifically to verify the assistant-written code against an independent computation.
+This project was built with **Claude Code** as a coding assistant (Anthropic), directed and reviewed by the author. The graph model, queries, judge rules, guardrails and evals are designed to be explainable end to end; the eval and test suites exist specifically to check the assistant-written code against an independent computation.
 
 ## Repo layout
 ```
-backend/blastradius/   ingest · parsers · osv · queries · triage (agents+judge) · memory · brain · agent · api
+backend/blastradius/   ingest · discover · depsdev · parsers · osv · queries · triage (agents+judge) · memory · brain
+                       toolkit · agent (LLM loop) · mcp_server · bench · jobs · security · api
+backend/snapshot       committed public inputs (reproducible, offline builds)
 backend/tests, backend/evals
-web/                   Next.js UI (graph canvas, panels, guided demo)
-docker-compose.yml     falkordb + api + web (+ seed profile)
+web/                   Next.js UI (graph canvas, panels, guided demo, repo analyser, benchmark)
+deploy/                production compose, Caddyfile, AWS scripts
+tools/                 Playwright helpers, outsider probe
 ```
 
 ## Limitations (honest)
-Reachability is package-level, not function-level: a vulnerable function that is never called still counts as a path. Go `go.mod` gives a flat module list (no transitive edges). `CALLS` edges are curated rather than discovered from traces. These are the next things to add (call-graph reachability, SBOM import, OpenTelemetry trace ingestion).
+- Reachability is **package-level**, not function-level: a vulnerable function that is never called still counts as a path.
+- The two curated tenants' `go.mod` and pinned `requirements.txt` are flat lists, so those services have direct dependency edges only; analysed repos get resolved transitive trees from deps.dev (up to 60 direct dependencies per manifest).
+- The Maven/Gradle parsers read literal versions; versions that come from a parent BOM are recovered through deps.dev resolution, not by evaluating the build.
+- Discovery reads Compose and Kubernetes env vars; calls made through other means (service meshes, hard-coded hosts) are not seen.
+- Analysed repos have no company-brain data (no commit history is ingested for them) and unknown exposure.
+- The Gemini tool loop is tested against a mock model server; it has not been exercised against the live API unless you set a key.
+- A hosted demo can be rate-limited by GitHub's anonymous API quota; the repo analyser says so and suggests running locally.

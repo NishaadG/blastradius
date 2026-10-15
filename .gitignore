@@ -4,9 +4,11 @@ __pycache__/
 node_modules/
 .next/
 tools/node_modules/
-backend/data/
 .env
 .env.local
 *.log
 .pytest_cache/
 docs/*.webm
+backend/.cache/
+deploy/.env
+deploy/aws/.state.json

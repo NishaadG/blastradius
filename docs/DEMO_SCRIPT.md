@@ -13,4 +13,11 @@ Record at 1080p+. Run the app, open `http://localhost:3001`, and either click **
 | 1:55 | Company tab → paymentservice | "The company brain: owners from CODEOWNERS, expertise from commits, and decisions traced to the source commit, with staleness marked." |
 | 2:15 | Switch tenant → Memory empty | "Each tenant is its own FalkorDB graph. Memory can't leak across them." |
 | 2:30 | `docker stop` FalkorDB → red banner | "And the test that matters: stop FalkorDB and the product stops. The graph isn't decoration. It's the product." |
-| 2:42 | Title card: repo, EVALS 27/27, $0 | "Open source, runs locally for free, 27 of 27 correctness checks against an independent computation." |
+| 2:42 | Title card: repo, EVALS 35/35, $0 | "Open source, runs locally for free, 35 of 35 correctness checks against an independent computation." |
+
+## Optional extra beats (if you have time to spare)
+| Beat | On screen | Voiceover |
+|---|---|---|
+| Any repo | Header → **Analyse a repo** → `christophetd/log4shell-vulnerable-app` → triage `CVE-2021-44228` | "Paste any public repo. It resolves the transitive tree and finds Log4Shell through spring-boot-starter-log4j2, a path no manifest names." |
+| MCP | Claude Code or Claude Desktop asking "what is our riskiest vulnerability?" with the Blastradius MCP server connected | "The same graph is an MCP server, so any AI client can use it. Read-only on the public site." |
+| Under load | Memory tab → **50 agents** → results | "Fifty agents reading paths and writing memory to one graph at once: reads stay fast, writes queue, and every retry is counted." |

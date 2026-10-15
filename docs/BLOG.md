@@ -37,8 +37,20 @@ Each tenant gets its **own FalkorDB graph**, so isolation is structural rather t
 ## A company brain with receipts
 Ownership comes from `CODEOWNERS`, expertise from commit history, and dependency decisions link to the exact commit that made them. A `SUPERSEDES` edge marks decisions that were later overtaken, so the answer to "why do we pin this?" says whether the reasoning is still current.
 
+## The topology is discovered, not typed in
+Early on I hand-wrote which service calls which. That's the weakest part of any demo, so I replaced it: Blastradius now reads the project's own deployment files. In Online Boutique's Kubernetes manifests, `PRODUCT_CATALOG_SERVICE_ADDR=productcatalogservice:3550` is a call and a `LoadBalancer` Service is an internet exposure. In the OpenTelemetry demo's Compose file, bare env names resolve through `.env`, and only a real `host:container` port mapping counts as exposure. Checked against my old hand-written list, discovery recovered 100% of the OpenTelemetry edges (and found 7 the docs never mention) and 94% of Boutique's; the one it misses is in no deployment file at all, and the eval report says so.
+
+## Any public repo, including the paths manifests hide
+Paste `owner/name` and Blastradius finds the manifests, asks [deps.dev](https://deps.dev) for the resolved dependency tree when a manifest lists only direct dependencies, and builds a tenant graph. Pointed at a deliberately vulnerable Java app, it finds Log4Shell as `app → spring-boot-starter-log4j2 → log4j-core@2.14.1`. The build file never mentions log4j-core; a static parser sees nothing. A graph of resolved dependencies sees the whole chain.
+
+## One graph, many AI clients
+The same toolkit is exposed as an MCP server, so Claude Desktop, Claude Code or any MCP client can ask the graph directly, and as a tool-calling loop for the chat box. The model can only call validated, read-only tools; it never sees Cypher.
+
 ## How do we know it's right?
-Ground truth is computed *without* the graph from the raw lockfiles, cached OSV data, the call list and `CODEOWNERS`, then compared to the product: affected-service sets and verdicts for all 96 advisories, that every returned path is a real chain of lockfile edges, exposure distances, ownership, transitive callers, memory reuse and tenant isolation. 27 of 27 pass. There are also guardrail checks: write queries are rejected on the agent path.
+Ground truth is computed *without* the graph from the raw lockfiles, cached OSV data, the discovered topology and `CODEOWNERS`, then compared to the product: affected-service sets and verdicts for all 96 advisories, that every returned path is a real chain of lockfile edges, exposure distances, ownership, transitive callers, memory reuse, and tenant and session isolation. 35 of 35 pass, plus 30 unit tests and guardrail checks (write queries are rejected on the agent path).
+
+## Under load, honestly
+Track 2 mentions high-concurrency shared state, so I benchmarked it: 10, 50 and 100 agents hammering one graph. Reads stay fast; FalkorDB serialises writes, so write latency queues. At 100 agents my first run saw about 2% of operations rejected with `Max pending queries exceeded`. That's FalkorDB protecting itself, so the client now retries with jittered backoff and counts every retry in the results instead of hiding them.
 
 ## The "is the graph decoration?" test
 Stop the FalkorDB container. The UI turns red and nothing answers: no cache, no fallback, by design. Start it, and everything resumes. If removing the database leaves the product working, the database was decoration. Here, it is the product.

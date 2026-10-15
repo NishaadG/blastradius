@@ -15,6 +15,15 @@ def _run(tenant, cypher, params=None):
                             "rows": len(res.result_set)}
 
 
+def tenant_meta(tenant):
+    """Title/repo and whether exposure could be determined (curated tenants discover it from deployment files)."""
+    rows, _ = _run(tenant, "MATCH (m:Meta {k:'tenant'}) RETURN m.title, m.repo, m.exposure_known, m.kind, m.built_at")
+    if not rows:
+        return {"title": tenant, "repo": None, "exposure_known": True, "kind": "curated", "built_at": None}
+    r = rows[0]
+    return {"title": r[0], "repo": r[1], "exposure_known": bool(r[2]), "kind": r[3], "built_at": r[4]}
+
+
 # ---------------------------------------------------------------- advisory lookup
 Q_ADVISORY = """
 MATCH (a:Advisory)

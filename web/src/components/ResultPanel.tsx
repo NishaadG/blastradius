@@ -107,7 +107,11 @@ export default function ResultPanel({
                 <div key={s.service} className="border-b border-rule py-3 first:pt-0 last:border-b-0">
                   <div className="flex items-baseline gap-3">
                     <h4 className="serif text-[20px] leading-none">{s.service}</h4>
-                    {s.exposed && <span className="label !text-amber">▲ internet-exposed</span>}
+                    {s.exposure_unknown ? (
+                      <span className="label !text-amber" title="No deployment topology for this repository">▲ exposure unknown, assumed reachable</span>
+                    ) : (
+                      s.exposed && <span className="label !text-amber">▲ internet-exposed</span>
+                    )}
                     {s.dev_only && <span className="label">dev only</span>}
                   </div>
                   <dl className="mt-2.5 grid grid-cols-[96px_minmax(0,1fr)] gap-y-1.5 text-[12.5px] [&>dd]:break-words">
@@ -118,7 +122,7 @@ export default function ResultPanel({
                       </>
                     )}
                     <dt className="label pt-0.5">Dependency</dt>
-                    <dd><Chain items={[s.service, ...best.path.slice(1).map((p) => p.split(":")[1])]} hot /></dd>
+                    <dd><Chain items={[s.service, ...best.path.slice(1).map((p) => p.slice(p.indexOf(":") + 1))]} hot /></dd>
                     <dt className="label pt-0.5">Fix</dt>
                     <dd className="mono text-[12px] text-green">{best.pkg} ≥ {best.fixed ?? "?"}</dd>
                     <dt className="label pt-0.5">Owners</dt>

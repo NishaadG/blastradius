@@ -1,0 +1,77 @@
+# Public deployment: HTTPS via Caddy, FalkorDB reachable only on the internal network and password-protected.
+#   cp .env.example .env   # set SITE_ADDRESS and FALKOR_PASSWORD
+#   docker compose -f docker-compose.prod.yml up -d --build falkordb
+#   docker compose -f docker-compose.prod.yml --profile seed run --rm seed
+#   docker compose -f docker-compose.prod.yml up -d --build
+services:
+  falkordb:
+    image: falkordb/falkordb:v4.14.10
+    restart: unless-stopped
+    environment:
+      REDIS_ARGS: "--requirepass ${FALKOR_PASSWORD:?set FALKOR_PASSWORD}"
+      # a deeper queue absorbs bursts; clients still retry with backoff if it fills (see db.py)
+      FALKORDB_ARGS: "MAX_QUEUED_QUERIES 400"
+    volumes:
+      - falkor_data:/var/lib/falkordb/data
+    networks: [internal]
+    mem_limit: 700m
+    # no `ports:` on purpose: the database is never published to the internet
+
+  api:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      FALKOR_HOST: falkordb
+      FALKOR_PASSWORD: ${FALKOR_PASSWORD}
+      BR_PUBLIC: "1"
+      SITE_ADDRESS: ${SITE_ADDRESS}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    depends_on: [falkordb]
+    networks: [internal]
+    mem_limit: 700m
+
+  web:
+    build:
+      context: ../web
+      args:
+        NEXT_PUBLIC_API: ""
+    restart: unless-stopped
+    depends_on: [api]
+    networks: [internal]
+    mem_limit: 300m
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [api, web]
+    networks: [internal]
+
+  seed:
+    profiles: ["seed"]
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "blastradius.build"]
+    environment:
+      FALKOR_HOST: falkordb
+      FALKOR_PASSWORD: ${FALKOR_PASSWORD}
+    depends_on: [falkordb]
+    networks: [internal]
+
+networks:
+  internal: {}
+
+volumes:
+  falkor_data:
+  caddy_data:

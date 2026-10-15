@@ -1,7 +1,8 @@
-"""Tenant definitions. Each tenant is a real public project, treated as a 'company'.
+"""Curated tenants: two real public projects treated as two 'companies'.
 
-Service-to-service CALLS edges are curated from each project's public architecture docs
-(README / docs). Dependency data comes from the real lockfiles in the repos.
+Dependencies come from their real lockfiles; the service call graph and internet exposure are DISCOVERED from
+their deployment files (see discover.py). `reference_calls` is the hand-written list from the projects' docs and
+is used only by the evals to cross-check discovery. `supplement_*` covers the few facts no deployment file holds.
 """
 
 TENANTS = {
@@ -11,9 +12,10 @@ TENANTS = {
         "branch": "main",
         "codeowners": ".github/CODEOWNERS",
         "services": [
-            {"name": "frontend", "path": "src/frontend", "kind": "npm", "file": "package-lock.json", "exposed": True},
+            {"name": "frontend-proxy", "path": "src/frontend-proxy", "kind": "none"},
+            {"name": "frontend", "path": "src/frontend", "kind": "npm", "file": "package-lock.json"},
             {"name": "payment", "path": "src/payment", "kind": "npm", "file": "package-lock.json"},
-            {"name": "react-native-app", "path": "src/react-native-app", "kind": "npm", "file": "package-lock.json", "exposed": True},
+            {"name": "react-native-app", "path": "src/react-native-app", "kind": "npm", "file": "package-lock.json"},
             {"name": "checkout", "path": "src/checkout", "kind": "gomod", "file": "go.mod"},
             {"name": "product-catalog", "path": "src/product-catalog", "kind": "gomod", "file": "go.mod"},
             {"name": "recommendation", "path": "src/recommendation", "kind": "none"},
@@ -29,15 +31,15 @@ TENANTS = {
             {"name": "chatbot", "path": "src/chatbot", "kind": "requirements", "file": "requirements.txt"},
             {"name": "load-generator", "path": "src/load-generator", "kind": "requirements", "file": "requirements.txt"},
         ],
-        "calls": [
+        "discover": {"kind": "compose", "files": ["compose.yaml", "compose.agent.yaml"]},
+        "supplement_calls": [("react-native-app", "frontend-proxy")],
+        "supplement_exposed": ["react-native-app"],  # a mobile client on users' devices: no deployment file says so
+        "reference_calls": [
             ("frontend", "checkout"), ("frontend", "cart"), ("frontend", "product-catalog"),
             ("frontend", "currency"), ("frontend", "ad"), ("frontend", "recommendation"),
-            ("frontend", "shipping"), ("react-native-app", "frontend"),
-            ("checkout", "cart"), ("checkout", "currency"), ("checkout", "email"),
+            ("frontend", "shipping"), ("checkout", "cart"), ("checkout", "currency"), ("checkout", "email"),
             ("checkout", "payment"), ("checkout", "product-catalog"), ("checkout", "shipping"),
-            ("checkout", "accounting"), ("checkout", "fraud-detection"),
-            ("recommendation", "product-catalog"), ("load-generator", "frontend"),
-            ("chatbot", "mcp"), ("mcp", "product-catalog"), ("agent", "mcp"),
+            ("recommendation", "product-catalog"),
         ],
     },
     "boutique": {
@@ -46,7 +48,7 @@ TENANTS = {
         "branch": "main",
         "codeowners": ".github/CODEOWNERS",
         "services": [
-            {"name": "frontend", "path": "src/frontend", "kind": "gomod", "file": "go.mod", "exposed": True},
+            {"name": "frontend", "path": "src/frontend", "kind": "gomod", "file": "go.mod"},
             {"name": "checkoutservice", "path": "src/checkoutservice", "kind": "gomod", "file": "go.mod"},
             {"name": "productcatalogservice", "path": "src/productcatalogservice", "kind": "gomod", "file": "go.mod"},
             {"name": "shippingservice", "path": "src/shippingservice", "kind": "gomod", "file": "go.mod"},
@@ -59,7 +61,15 @@ TENANTS = {
             {"name": "cartservice", "path": "src/cartservice", "kind": "none"},
             {"name": "adservice", "path": "src/adservice", "kind": "none"},
         ],
-        "calls": [
+        "discover": {
+            "kind": "kubernetes",
+            "files": [f"kubernetes-manifests/{n}.yaml" for n in (
+                "frontend", "checkoutservice", "productcatalogservice", "shippingservice", "currencyservice",
+                "paymentservice", "emailservice", "recommendationservice", "loadgenerator", "cartservice", "adservice")],
+        },
+        "supplement_calls": [],
+        "supplement_exposed": [],
+        "reference_calls": [
             ("frontend", "checkoutservice"), ("frontend", "cartservice"), ("frontend", "productcatalogservice"),
             ("frontend", "currencyservice"), ("frontend", "adservice"), ("frontend", "recommendationservice"),
             ("frontend", "shippingservice"), ("frontend", "shoppingassistantservice"),

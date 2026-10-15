@@ -3,6 +3,7 @@
 import clsx from "clsx";
 import { useEffect, useState } from "react";
 import { api, Brain, GraphData, Risk, ServiceCard } from "@/lib/api";
+import Bench from "./Bench";
 import { Cypher, Empty, Label, Loading, Priority, Severity, timeAgo } from "./ui";
 
 /* ------------------------------------------------------------------ risk board */
@@ -57,7 +58,7 @@ export function RiskBoard({ risk, activeId, onPick }: { risk: Risk | null; activ
 }
 
 /* ------------------------------------------------------------------ memory */
-export function MemoryView({ brain, onReset }: { brain: Brain | null; onReset: () => void }) {
+export function MemoryView({ tenant, brain, onReset }: { tenant: string; brain: Brain | null; onReset: () => void }) {
   if (!brain) return <Loading what="Reading memory" />;
   const reused = brain.cases.reduce((a, c) => a + c.reused, 0);
   const stats: [number, string][] = [
@@ -120,7 +121,9 @@ export function MemoryView({ brain, onReset }: { brain: Brain | null; onReset: (
         </ul>
       </section>
 
-      <button onClick={onReset} className="btn btn-quiet my-5 self-start">Reset demo memory</button>
+      <Bench tenant={tenant} />
+
+      <button onClick={onReset} className="btn btn-quiet my-5 self-start">Reset my memory</button>
     </div>
   );
 }

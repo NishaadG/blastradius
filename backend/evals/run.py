@@ -1,18 +1,17 @@
 """Evaluation: does the graph answer the same as an independent computation from raw data?
 
 Ground truth is derived WITHOUT FalkorDB: lockfiles parsed from the cached raw files, OSV results from the
-cache, exposure via BFS over the curated call list, owners from CODEOWNERS. Each check compares that to the
-answer the graph-backed product gives.
+cache, the call graph and exposure discovered from the projects' deployment files, owners from CODEOWNERS. Each check
+compares that to the answer the graph-backed product gives. One extra check compares *discovery itself* against the
+hand-written call lists from the projects' docs.
 
     python -m evals.run            # writes EVALS.md at repo root, exit 1 on any failure
 """
-import json
 import sys
 from collections import deque
 from pathlib import Path
 
-from blastradius import db, ingest as ing, memory, osv, queries as q, triage
-from blastradius.config import DATA_DIR
+from blastradius import config, db, ingest as ing, memory, osv, queries as q, triage
 from blastradius.parsers import PARSERS
 from blastradius.tenants import TENANTS
 
@@ -29,12 +28,12 @@ def load_truth(tenant):
     for s in t["services"]:
         if s["kind"] == "none":
             continue
-        f = ing.RAW / t["repo"].replace("/", "__") / f"{s['path']}/{s['file']}".replace("/", "__")
+        f = config.cached_path(ing._rel(t["repo"], f"{s['path']}/{s['file']}"))
         pk, ed = PARSERS[s["kind"]](f.read_text(encoding="utf-8"))
         svc_pkgs[s["name"]] = set(pk)
         svc_edges[s["name"]] = {(a, b) for a, b, _ in ed if a is not None} | {(s["name"], b) for a, b, _ in ed if a is None}
         dev_of[s["name"]] = {k for k, v in pk.items() if v["dev"]}
-    cache = json.loads((DATA_DIR / "osv_cache.json").read_text(encoding="utf-8"))
+    cache = osv._load()
     tenant_pkgs = set().union(*svc_pkgs.values())  # the OSV cache is shared across tenants: scope to this one
     affected = {}  # advisory id -> set(pkg keys)
     for key, ids in cache["queries"].items():
@@ -42,16 +41,13 @@ def load_truth(tenant):
             continue
         for vid in ids:
             affected.setdefault(vid, set()).add(key)
-    return t, svc_pkgs, svc_edges, dev_of, affected
+    calls, exposed = ing.curated_graph_inputs(tenant)
+    return t, svc_pkgs, svc_edges, dev_of, affected, calls, exposed
 
 
-def exposure_truth(t, service):
-    exposed = {s["name"] for s in t["services"] if s.get("exposed")}
-    out = {}
-    for s in t["services"]:
-        out.setdefault(s["name"], [])
+def exposure_truth(exposed, calls, service):
     adj = {}
-    for a, b in t["calls"]:
+    for a, b in calls:
         adj.setdefault(a, []).append(b)
     dist = {e: 0 for e in exposed}
     dq = deque(exposed)
@@ -65,10 +61,10 @@ def exposure_truth(t, service):
 
 
 def eval_tenant(tenant):
-    t, svc_pkgs, svc_edges, dev_of, affected = load_truth(tenant)
+    t, svc_pkgs, svc_edges, dev_of, affected, calls, exposed = load_truth(tenant)
     all_svcs = {s["name"] for s in t["services"]}
     adv_ids = [r[0] for r in db.read(tenant, "MATCH (a:Advisory) RETURN a.id").result_set]
-    check(f"{tenant}/coverage", "every OSV advisory in the cache is in the graph",
+    check(f"{tenant}/coverage", "every OSV advisory for this tenant's packages is in the graph",
           set(adv_ids) == set(affected), f"{len(adv_ids)} vs {len(affected)}")
     bad_services = bad_paths = bad_verdict = 0
     for vid in adv_ids:
@@ -82,7 +78,7 @@ def eval_tenant(tenant):
             if p["path"][0] != p["service"] or not all(h in svc_edges[p["service"]] for h in hops) or p["path"][-1] not in affected[vid]:
                 bad_paths += 1
         exp_prod = {s for s in exp_svcs if affected[vid] & (svc_pkgs[s] - dev_of[s])}
-        res = triage.run_triage(tenant, vid)
+        res = triage.run_triage(tenant, vid, record=False)
         exp_verdict = "AFFECTED" if exp_prod else ("NEEDS_HUMAN" if exp_svcs else "NOT_AFFECTED")
         if res["verdict"] != exp_verdict:
             bad_verdict += 1
@@ -94,11 +90,21 @@ def eval_tenant(tenant):
     bad_exp = 0
     for s in all_svcs:
         ep, _ = q.exposure_path(tenant, s)
-        truth = exposure_truth(t, s)
+        truth = exposure_truth(exposed, calls, s)
         got = None if ep is None else len(ep) - 1
         if got != truth:
             bad_exp += 1
-    check(f"{tenant}/exposure", f"internet-exposure distance matches BFS for {len(all_svcs)} services", bad_exp == 0, f"{bad_exp} mismatches")
+    check(f"{tenant}/exposure", f"internet-exposure distance matches BFS over discovered topology for {len(all_svcs)} services", bad_exp == 0, f"{bad_exp} mismatches")
+
+    graph_calls = {(r[0], r[1]) for r in db.read(tenant, "MATCH (a:Service)-[:CALLS]->(b:Service) RETURN a.name, b.name").result_set}
+    check(f"{tenant}/call-graph", f"graph stores exactly the {len(calls)} discovered service calls", graph_calls == set(calls), f"{len(graph_calls)} in graph")
+
+    ref = set(map(tuple, t["reference_calls"]))
+    found = ref & set(calls)
+    recall = len(found) / len(ref)
+    extra = len(set(calls) - ref)
+    check(f"{tenant}/discovery-vs-docs", f"discovery recovers the hand-written call list from the project docs (recall {recall:.0%}); {extra} additional call(s) found only in deployment files",
+          recall >= 0.85, f"missing: {sorted(ref - found)}")
 
     co = ing.fetch(t["repo"], t["branch"], t["codeowners"])
     truth_owned = {}
@@ -107,13 +113,13 @@ def eval_tenant(tenant):
     bad_own = sum(1 for s in all_svcs if {o["owner"] for o in q.owners(tenant, s)[0]} != truth_owned.get(s, set()))
     check(f"{tenant}/ownership", f"owners equal CODEOWNERS for {len(all_svcs)} services", bad_own == 0, f"{bad_own} mismatches")
 
+    rev = {}
+    for a, b in calls:
+        rev.setdefault(b, []).append(a)
     bad_callers = 0
     for s in all_svcs:
         callers = {c["service"] for c in q.upstream_callers(tenant, s)[0]}
         seen, dq = set(), deque([s])
-        rev = {}
-        for a, b in t["calls"]:
-            rev.setdefault(b, []).append(a)
         while dq:
             x = dq.popleft()
             for y in rev.get(x, []):
@@ -125,32 +131,36 @@ def eval_tenant(tenant):
             bad_callers += 1
     check(f"{tenant}/blast-radius", f"transitive upstream callers equal reverse-BFS for {len(all_svcs)} services", bad_callers == 0, f"{bad_callers} mismatches")
 
+    humans = sum(1 for s in all_svcs for e in q.experts(tenant, s)[0] if e["kind"] == "person")
+    check(f"{tenant}/company-brain", "expertise includes real human contributors, not only bots", humans > 0, f"{humans} person-service links")
+
 
 def eval_scenarios():
     t = "boutique"
-    r = triage.run_triage(t, "GHSA-jfh8-c2jp-5v3q")
+    r = triage.run_triage(t, "GHSA-jfh8-c2jp-5v3q", record=False)
     check("scenario", "Log4Shell (Maven) is NOT_AFFECTED by proof of absence", r["verdict"] == "NOT_AFFECTED" and r["reason"] == "no_path")
-    r = triage.run_triage(t, "GHSA-h755-8qp9-cq85")
+    r = triage.run_triage(t, "GHSA-h755-8qp9-cq85", record=False)
     check("scenario", "protobufjs advisory with a fixed version in use is NOT_AFFECTED (version outside range)",
           r["verdict"] == "NOT_AFFECTED" and r["reason"] == "version_outside_range", r["headline"])
-    r = triage.run_triage(t, "CVE-2099-0000")
+    r = triage.run_triage(t, "CVE-2099-0000", record=False)
     check("scenario", "unknown identifier is NEEDS_HUMAN, never guessed", r["verdict"] == "NEEDS_HUMAN")
     top = triage.risk_board(t)["advisories"][0]
-    r = triage.run_triage(t, top["id"])
+    r = triage.run_triage(t, top["id"], record=False)
     check("scenario", "top-ranked advisory is AFFECTED and every action is gated", r["verdict"] == "AFFECTED" and all(a["status"] == "pending_approval" for a in r["actions"]))
 
-    # memory: decision becomes precedent for a different advisory on the same package
-    db.write(t, "MATCH (n) WHERE n:Case OR n:Run OR n:Step DETACH DELETE n")
-    a1 = triage.run_triage(t, "CVE-2026-41242")
-    cid = memory.record_decision(t, a1["advisory"]["id"], "patched", "eval", "eval", [s["service"] for s in a1["services"]], eco="npm")
-    a2 = triage.run_triage(t, "CVE-2026-48712")
+    sid = "eval-session"
+    memory.reset_session(t, sid)
+    a1 = triage.run_triage(t, "CVE-2026-41242", sid=sid)
+    cid = memory.record_decision(t, a1["advisory"]["id"], "patched", "eval", "eval", [s["service"] for s in a1["services"]], eco="npm", sid=sid)
+    a2 = triage.run_triage(t, "CVE-2026-48712", sid=sid)
     check("memory", "a decision on one protobufjs advisory is cited when triaging another", any(p["id"] == cid for p in a2["precedents"]))
-    a1b = triage.run_triage(t, "CVE-2026-41242")
+    a1b = triage.run_triage(t, "CVE-2026-41242", sid=sid)
     check("memory", "the same advisory finds its exact precedent", any(p["id"] == cid and p["exact"] for p in a1b["precedents"]))
-    other = triage.run_triage("otel", "CVE-2026-41242")
+    other = triage.run_triage("otel", "CVE-2026-41242", sid=sid, record=False)
     check("memory", "tenant isolation: boutique memory is invisible to otel", not other["precedents"])
-    db.write(t, "MATCH (n) WHERE n:Case OR n:Run OR n:Step DETACH DELETE n")
-    db.write(t, "MATCH (p:Playbook) SET p.successes = 0, p.failures = 0")
+    stranger = triage.run_triage(t, "CVE-2026-41242", sid="someone-else", record=False)
+    check("memory", "session isolation: another visitor never sees this memory", not stranger["precedents"])
+    memory.reset_session(t, sid)
 
     for bad in ("MATCH (n) DETACH DELETE n", "CREATE (:X)", "MATCH (n) SET n.x = 1", "MERGE (:Y)"):
         try:
@@ -165,7 +175,8 @@ def eval_scenarios():
     except Exception:
         ok = True
     check("guardrails", "database itself rejects writes on the read-only path (defence in depth)", ok)
-    check("guardrails", "query timeout and row cap configured", db.config.QUERY_TIMEOUT_MS <= 3000 and db.config.MAX_ROWS <= 100)
+    check("guardrails", "query timeout and row cap configured", config.QUERY_TIMEOUT_MS <= 3000 and config.MAX_ROWS <= 100)
+    check("guardrails", "advisory identifiers are validated before reaching any URL", not osv.valid_id("../../v1/query") and osv.valid_id("CVE-2021-44228"))
 
 
 def main():
@@ -174,8 +185,8 @@ def main():
     eval_scenarios()
     passed = sum(1 for r in results if r[2])
     lines = ["# Evaluation", "",
-             "Ground truth is computed **without the graph** (raw lockfiles, cached OSV data, curated call list, CODEOWNERS) "
-             "and compared with what the FalkorDB-backed product returns.", "",
+             "Ground truth is computed **without the graph** (raw lockfiles, cached OSV data, topology discovered from deployment "
+             "files, CODEOWNERS) and compared with what the FalkorDB-backed product returns.", "",
              f"**{passed}/{len(results)} checks passed.**", "", "| Group | Check | Result | Detail |", "|---|---|---|---|"]
     for g, n, ok, d in results:
         lines.append(f"| {g} | {n} | {'PASS' if ok else '**FAIL**'} | {d} |")

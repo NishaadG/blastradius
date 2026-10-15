@@ -1,4 +1,19 @@
-export const API = process.env.NEXT_PUBLIC_API ?? "http://localhost:8000";
+// Empty string = same origin (production, behind the reverse proxy). Locally .env.local points at :8000.
+export const API = process.env.NEXT_PUBLIC_API ?? "";
+
+/** One id per browser: memory written by this visitor is invisible to (and not wipeable by) other visitors. */
+export function sessionId(): string {
+  try {
+    let s = localStorage.getItem("br-session");
+    if (!s) {
+      s = crypto.randomUUID();
+      localStorage.setItem("br-session", s);
+    }
+    return s;
+  } catch {
+    return "anon";
+  }
+}
 
 export type Trace = { cypher: string; params: Record<string, unknown>; ms: number; rows: number };
 export type Step = { agent: string; tool: string; summary: string; ms: number; traces: Trace[] };
@@ -21,6 +36,7 @@ export type ServiceFinding = {
   dev_only: boolean;
   exposed: boolean;
   exposure_path: string[] | null;
+  exposure_unknown?: boolean;
   owners: Owner[];
   callers: Caller[];
 };
@@ -79,7 +95,9 @@ export type TriageResult = {
 export type TenantInfo = {
   id: string;
   title: string;
-  repo: string;
+  repo: string | null;
+  kind: "curated" | "byo";
+  exposure_known: boolean;
   nodes: Record<string, number>;
   edges: Record<string, number>;
 };
@@ -87,7 +105,21 @@ export type GraphData = {
   nodes: { id: string; exposed: boolean; kind: string; centrality: number }[];
   edges: { source: string; target: string }[];
   trace: Trace[];
+  exposure_known: boolean;
 };
+export type BenchResult = {
+  tenant: string;
+  agents: number;
+  seconds: number;
+  errors: number;
+  backpressure_retries?: number;
+  operations: number;
+  ops_per_sec: number;
+  overall: { p50_ms: number; p95_ms: number; p99_ms: number; mean_ms: number };
+  by_op: Record<string, { count: number; p50_ms: number; p95_ms: number }>;
+};
+export type IngestJob = { id: string; repo: string; status: "running" | "done" | "error"; log: string[]; tenant: string | null; error: string | null };
+export type AppConfig = { public: boolean; max_repo_services: number; max_packages: number };
 export type RiskItem = {
   id: string;
   cve: string | null;
@@ -119,7 +151,7 @@ export type AskResult = { answer: string; tool_calls: { tool: string; args: Reco
 async function j<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`${API}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: { "Content-Type": "application/json", "X-Session": sessionId(), ...(init?.headers ?? {}) },
   });
   if (!r.ok) {
     const body = await r.text();
@@ -147,6 +179,10 @@ export async function healthy(): Promise<boolean> {
 export type EvalInfo = { available: boolean; passed?: number; total?: number };
 
 export const api = {
+  config: () => j<AppConfig>("/api/config"),
+  bench: (t: string, agents: number) => j<BenchResult>(`/api/${t}/bench?agents=${agents}&seconds=4`),
+  startIngest: (repo: string) => post<{ job: string }>("/api/ingest", { repo }),
+  ingestJob: (id: string) => j<IngestJob>(`/api/ingest/${id}`),
   evals: () => j<EvalInfo>("/api/evals"),
   tenants: () => j<TenantInfo[]>("/api/tenants"),
   graph: (t: string) => j<GraphData>(`/api/${t}/graph`),

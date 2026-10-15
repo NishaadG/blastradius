@@ -94,7 +94,8 @@ def test_precedent_is_found_and_reused():
     again = triage.run_triage(T, "CVE-2000-0001")
     assert any(p["id"] == cid and p["exact"] for p in again["precedents"])
     b = memory.brain_timeline(T)
-    assert b["cases"][0]["reused"] >= 1 and b["playbooks"][0]["successes"] >= 1
+    npm = next(p for p in b["playbooks"] if p["key"].startswith("npm:"))
+    assert b["cases"][0]["reused"] >= 1 and npm["successes"] >= 1
 
 
 def test_vex_precedent_flips_verdict_to_not_affected():

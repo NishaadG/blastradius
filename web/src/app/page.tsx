@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import GraphCanvas from "@/components/GraphCanvas";
 import ResultPanel from "@/components/ResultPanel";
 import { CompanyView, MemoryView, RiskBoard } from "@/components/Views";
+import RepoAnalyzer from "@/components/RepoAnalyzer";
 import { Label } from "@/components/ui";
 import { api, AskResult, Brain, GraphData, healthy, ID_RE, Risk, TenantInfo, TriageResult } from "@/lib/api";
 
@@ -45,15 +46,19 @@ export default function Home() {
   const refreshBrain = useCallback((t: string) => api.brain(t).then(setBrain).catch(() => {}), []);
   const refreshRisk = useCallback((t: string) => api.risk(t).then(setRisk).catch((e) => setError(String(e))), []);
 
+  const refreshTenants = useCallback(
+    () => api.tenants().then((t) => { setTenants(t); return t; }),
+    [],
+  );
   useEffect(() => {
-    api
-      .tenants()
+    refreshTenants()
       .then((t) => {
-        setTenants(t);
         if (t.length && !t.find((x) => x.id === "boutique")) setTenant(t[0].id);
       })
-      .catch(() => setError("Cannot reach the Blastradius API. Is the backend running on :8000 and FalkorDB up?"));
-  }, []);
+      .catch(() => setError("Cannot reach the Blastradius API. Is the backend running and FalkorDB up?"));
+  }, [refreshTenants]);
+
+  const [forceStart, setForceStart] = useState(false);
 
   const runId = result?.run_id;
   useEffect(() => {
@@ -130,6 +135,7 @@ export default function Home() {
         if (ID_RE.test(q) && q.split(/\s+/).length === 1) {
           setInput(q);
           const r = await api.triage(t, q);
+          setForceStart(false);
           setResult(r);
           setReplayKey((k) => k + 1);
           refreshBrain(t);
@@ -138,6 +144,7 @@ export default function Home() {
         const a = await api.ask(tenant, q);
         setAnswer(a);
         if (a.triage) {
+          setForceStart(false);
           setResult(a.triage);
           setReplayKey((k) => k + 1);
           refreshBrain(tenant);
@@ -235,7 +242,11 @@ export default function Home() {
     ];
   }, [risk]);
 
+  const curated = tenants.filter((t) => t.kind === "curated");
+  const mine = tenants.filter((t) => t.kind === "byo");
   const current = tenants.find((t) => t.id === tenant);
+  const exposureKnown = current?.exposure_known ?? true;
+  const showStart = !result || forceStart;
   const nodeCount = current ? Object.values(current.nodes).reduce((a, b) => a + b, 0) : 0;
   const edgeCount = current ? Object.values(current.edges).reduce((a, b) => a + b, 0) : 0;
   const isUp = online && tenants.length > 0;
@@ -248,8 +259,8 @@ export default function Home() {
           <span className="serif text-[22px] font-medium leading-none tracking-[-0.01em]">Blastradius</span>
           <span className="label hidden xl:inline">supply-chain triage on a graph</span>
         </div>
-        <nav className="flex gap-5" aria-label="Tenant">
-          {tenants.map((t) => (
+        <nav className="flex items-center gap-5" aria-label="Tenant">
+          {curated.map((t) => (
             <button
               key={t.id}
               onClick={() => switchTenant(t.id)}
@@ -262,6 +273,22 @@ export default function Home() {
               {t.title}
             </button>
           ))}
+          {mine.length > 0 && (
+            <select
+              value={mine.some((t) => t.id === tenant) ? tenant : ""}
+              onChange={(e) => e.target.value && switchTenant(e.target.value)}
+              aria-label="Repositories you analysed"
+              className={clsx(
+                "max-w-[180px] cursor-pointer border-0 border-b-2 bg-transparent py-1 text-[13px] outline-none",
+                mine.some((t) => t.id === tenant) ? "border-ink font-medium" : "border-transparent text-ink-2",
+              )}
+            >
+              <option value="">Your repos ({mine.length})</option>
+              {mine.map((t) => (
+                <option key={t.id} value={t.id}>{t.title}</option>
+              ))}
+            </select>
+          )}
         </nav>
         <div className="ml-auto flex items-center gap-5">
           <span className="mono num hidden items-center gap-2 text-[11px] text-ink-2 md:flex">
@@ -273,6 +300,9 @@ export default function Home() {
               {evalInfo.passed}/{evalInfo.total} evals pass
             </span>
           )}
+          <button className="btn btn-quiet hidden sm:block" onClick={() => setForceStart((v) => !v)} aria-pressed={forceStart}>
+            Analyse a repo
+          </button>
           <button className={clsx("btn", !demo && "btn-solid")} onClick={() => (demo ? (cancelDemo.current = true) : playDemo())}>
             {demo ? "Stop demo" : "Guided demo"}
           </button>
@@ -305,9 +335,14 @@ export default function Home() {
               </button>
             ))}
           </div>
+          {!exposureKnown && (
+            <p className="mb-3 border-l-2 border-amber pl-3 text-[12px] leading-snug text-ink-2">
+              No deployment topology for this repository, so exposure is unknown and every service is assumed reachable from the internet.
+            </p>
+          )}
           {tab === "risk" && <RiskBoard risk={risk} activeId={result?.advisory?.id} onPick={run} />}
           {tab === "memory" && (
-            <MemoryView brain={brain} onReset={async () => { await api.reset(tenant); setResult(null); refreshBrain(tenant); }} />
+            <MemoryView tenant={tenant} brain={brain} onReset={async () => { await api.reset(tenant); setResult(null); refreshBrain(tenant); }} />
           )}
           {tab === "company" && (
             <CompanyView tenant={tenant} overview={overview} selected={selected} onSelect={setSelected} />
@@ -356,7 +391,7 @@ export default function Home() {
               onSelect={(s) => { setSelected(s); setTab("company"); }} />
             {!overview && !error && <div className="mono absolute inset-0 flex items-center justify-center text-[11px] text-faint">Loading graph…</div>}
             <div className="mono pointer-events-none absolute bottom-3 left-5 flex flex-wrap gap-x-5 gap-y-1 text-[10.5px] text-ink-2">
-              <span><i className="mr-1.5 inline-block h-[9px] w-[9px] border-[3px] border-double border-amber align-[-1px]" />internet-exposed</span>
+              <span><i className="mr-1.5 inline-block h-[9px] w-[9px] border-[3px] border-double border-amber align-[-1px]" />{exposureKnown ? "internet-exposed" : "exposure unknown"}</span>
               <span><i className="mr-1.5 inline-block h-[2px] w-3.5 bg-red align-middle" />attack path</span>
               <span><i className="mr-1.5 inline-block h-[9px] w-[9px] bg-red align-[-1px]" />vulnerable package</span>
               {!result && <span className="text-faint">node size = PageRank</span>}
@@ -375,7 +410,7 @@ export default function Home() {
 
         {/* right: case file or orientation */}
         <aside ref={caseRef} className="scroll border-rule bg-panel lg:min-h-0 lg:overflow-y-auto px-6 py-5 max-lg:order-2 max-lg:border-t lg:border-l">
-          {result ? (
+          {!showStart && result ? (
             <ResultPanel key={result.run_id} r={result} tenant={tenant} onReplay={() => setReplayKey((k) => k + 1)}
               onDecided={() => { refreshBrain(tenant); refreshRisk(tenant); }} />
           ) : (
@@ -404,6 +439,14 @@ export default function Home() {
                   ))}
                 </ul>
               </section>
+
+              <RepoAnalyzer
+                onDone={async (t) => {
+                  await refreshTenants();
+                  switchTenant(t);
+                  setForceStart(false);
+                }}
+              />
 
               <section className="mt-8 border-t border-rule pt-4">
                 <Label>How to read the graph</Label>

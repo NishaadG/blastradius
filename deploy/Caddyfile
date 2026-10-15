@@ -1,0 +1,28 @@
+# {$SITE_ADDRESS} is a hostname (automatic HTTPS) or ":80" for plain HTTP.
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	request_body {
+		max_size 64KB
+	}
+
+	@backend path /api/* /mcp /mcp/*
+	handle @backend {
+		reverse_proxy api:8000 {
+			# the api reads the client address Caddy observed; never trust a client-supplied value
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+
+	handle {
+		reverse_proxy web:3001
+	}
+}

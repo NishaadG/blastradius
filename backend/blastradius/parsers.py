@@ -106,4 +106,128 @@ def parse_requirements(text: str):
     return pkgs, edges
 
 
-PARSERS = {"npm": parse_npm_lock, "gomod": parse_go_mod, "requirements": parse_requirements}
+ECO_MAVEN, ECO_CARGO = "Maven", "crates.io"
+
+
+def parse_pom(text: str):
+    """Direct dependencies with a resolvable version (explicit, ${property}, or dependencyManagement)."""
+    import re
+    import xml.etree.ElementTree as ET
+
+    text = re.sub(r'\sxmlns="[^"]+"', "", text, count=1)  # drop the default namespace
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError:
+        return {}, []
+    props_el = root.find("properties")
+    props = {el.tag: (el.text or "").strip() for el in (list(props_el) if props_el is not None else [])}
+    props["project.version"] = (root.findtext("version") or root.findtext("parent/version") or "").strip()
+
+    def resolve(v):
+        if not v:
+            return None
+        v = v.strip()
+        for _ in range(3):
+            m = re.fullmatch(r"\$\{([^}]+)\}", v)
+            if not m:
+                break
+            v = props.get(m.group(1), "")
+        return v if v and "${" not in v else None
+
+    managed = {}
+    for d in root.findall("dependencyManagement/dependencies/dependency"):
+        g, a = d.findtext("groupId"), d.findtext("artifactId")
+        if g and a:
+            managed[f"{g.strip()}:{a.strip()}"] = resolve(d.findtext("version"))
+    pkgs, edges = {}, []
+    for d in root.findall("dependencies/dependency"):
+        g, a = (d.findtext("groupId") or "").strip(), (d.findtext("artifactId") or "").strip()
+        if not g or not a or "${" in g or "${" in a:
+            continue
+        name = f"{g}:{a}"
+        ver = resolve(d.findtext("version")) or managed.get(name)
+        if not ver:
+            continue
+        key = pkey(ECO_MAVEN, name, ver)
+        dev = (d.findtext("scope") or "").strip() == "test"
+        pkgs[key] = {"eco": ECO_MAVEN, "name": name, "version": ver, "dev": dev}
+        edges.append((None, key, dev))
+    return pkgs, edges
+
+
+def parse_cargo_lock(text: str):
+    import tomllib
+
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError:
+        return {}, []
+    packages = data.get("package", [])
+    by_name: dict[str, list[dict]] = {}
+    for p in packages:
+        by_name.setdefault(p["name"], []).append(p)
+    pkgs, edges = {}, []
+
+    def key_of(p):
+        return pkey(ECO_CARGO, p["name"], p["version"])
+
+    def resolve(dep: str):
+        parts = dep.split()
+        cands = by_name.get(parts[0], [])
+        if len(parts) > 1:
+            cands = [c for c in cands if c["version"] == parts[1]] or cands
+        return cands[0] if cands else None
+
+    for p in packages:
+        if "source" in p:  # registry/git packages only; local crates are the "service" itself
+            pkgs[key_of(p)] = {"eco": ECO_CARGO, "name": p["name"], "version": p["version"], "dev": False}
+    for p in packages:
+        for dep in p.get("dependencies", []):
+            c = resolve(dep)
+            if not c or "source" not in c:
+                continue
+            if "source" in p:
+                edges.append((key_of(p), key_of(c), False))
+            else:
+                edges.append((None, key_of(c), False))
+    return pkgs, edges
+
+
+_GRADLE_DEP = None
+
+
+def parse_gradle(text: str):
+    """Direct `group:artifact:version` coordinates in build.gradle / build.gradle.kts (literal versions only)."""
+    import re
+
+    global _GRADLE_DEP
+    if _GRADLE_DEP is None:
+        _GRADLE_DEP = re.compile(
+            r"""(?P<cfg>\b[a-zA-Z]+)\s*\(?\s*['"](?P<g>[\w.\-]+):(?P<a>[\w.\-]+):(?P<v>[\w.\-+]+)['"]""")
+    pkgs, edges = {}, []
+    for m in _GRADLE_DEP.finditer(re.sub(r"//.*", "", text)):
+        cfg = m.group("cfg")
+        if cfg.lower() not in {"implementation", "api", "compile", "runtime", "runtimeonly", "compileonly",
+                               "testimplementation", "testcompile", "testruntimeonly", "annotationprocessor", "kapt"}:
+            continue
+        ver = m.group("v")
+        if "$" in ver:
+            continue
+        name = f"{m.group('g')}:{m.group('a')}"
+        key = pkey(ECO_MAVEN, name, ver)
+        dev = cfg.lower().startswith("test")
+        pkgs[key] = {"eco": ECO_MAVEN, "name": name, "version": ver, "dev": dev}
+        edges.append((None, key, dev))
+    return pkgs, edges
+
+
+PARSERS = {
+    "npm": parse_npm_lock, "gomod": parse_go_mod, "requirements": parse_requirements,
+    "maven": parse_pom, "cargo": parse_cargo_lock, "gradle": parse_gradle,
+}
+
+# file name -> parser kind, used to discover services in an arbitrary repository
+LOCKFILES = {
+    "package-lock.json": "npm", "go.mod": "gomod", "requirements.txt": "requirements",
+    "pom.xml": "maven", "Cargo.lock": "cargo", "build.gradle": "gradle", "build.gradle.kts": "gradle",
+}
