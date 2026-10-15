@@ -1,55 +1,52 @@
 "use client";
 
 import clsx from "clsx";
-import { motion } from "framer-motion";
-import { Bot, BookMarked, ExternalLink, GitCommit, History, RotateCcw, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, Brain, GraphData, Risk, ServiceCard } from "@/lib/api";
-import { Cypher, Empty, Label, Pill, PriorityBadge, SevBadge, Spinner, timeAgo } from "./ui";
+import { Cypher, Empty, Label, Loading, Priority, Severity, timeAgo } from "./ui";
 
 /* ------------------------------------------------------------------ risk board */
 export function RiskBoard({ risk, activeId, onPick }: { risk: Risk | null; activeId?: string; onPick: (id: string) => void }) {
-  if (!risk) return <div className="flex justify-center py-10"><Spinner /></div>;
-  const total = risk.advisories.length || 1;
-  const bar: [string, string, string][] = [
-    ["P0", "bg-bad", "critical + internet-reachable"],
-    ["P1", "bg-warn", "critical, or high + reachable"],
-    ["P2", "bg-faint", "everything else"],
+  if (!risk) return <Loading what="Ranking advisories" />;
+  const cells: [string, string][] = [
+    ["P0", "critical and reachable"],
+    ["P1", "critical, or high and reachable"],
+    ["P2", "the rest"],
   ];
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="mb-3 grid grid-cols-3 gap-2">
-        {bar.map(([p, c, hint]) => (
-          <div key={p} className="rounded-xl border border-line bg-surface-2/60 p-2.5" title={hint}>
-            <div className="flex items-baseline justify-between">
-              <span className="mono text-[11px] text-muted">{p}</span>
-              <span className="text-lg font-semibold tabular-nums">{risk.summary[p] ?? 0}</span>
-            </div>
-            <div className="mt-1.5 h-1 rounded-full bg-line">
-              <div className={clsx("h-1 rounded-full", c)} style={{ width: `${((risk.summary[p] ?? 0) / total) * 100}%` }} />
+      <div className="grid grid-cols-3 border-y border-rule">
+        {cells.map(([p, hint], i) => (
+          <div key={p} className={clsx("px-3 py-2.5", i > 0 && "border-l border-rule")}>
+            <div className={clsx("serif num text-[30px] leading-none", p === "P0" && "text-red")}>{risk.summary[p] ?? 0}</div>
+            <div className="mt-1.5 flex items-baseline gap-1.5">
+              <span className="mono text-[10.5px] font-semibold">{p}</span>
+              <span className="text-[10.5px] leading-tight text-faint">{hint}</span>
             </div>
           </div>
         ))}
       </div>
-      <Label>Ranked by severity × exposure</Label>
-      <ul className="scroll -mr-2 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-2">
+      <Label className="mt-4">Ranked by severity, then exposure</Label>
+      <ul className="scroll -mr-3 flex min-h-0 flex-1 flex-col overflow-y-auto pr-3">
         {risk.advisories.map((a) => (
-          <li key={a.id}>
+          <li key={a.id} className="border-b border-rule">
             <button
               onClick={() => onPick(a.cve ?? a.id)}
               className={clsx(
-                "w-full rounded-xl border p-2.5 text-left transition",
-                activeId === a.id ? "border-accent/60 bg-accent/5" : "border-line bg-surface-2/40 hover:border-line-strong hover:bg-surface-2",
+                "grid w-full grid-cols-[34px_1fr] gap-x-3 border-l-2 py-2.5 pl-2 pr-1 text-left transition-colors hover:bg-sunk",
+                activeId === a.id ? "border-ink bg-sunk" : "border-transparent",
               )}
             >
-              <div className="flex items-center gap-1.5">
-                <PriorityBadge p={a.priority} />
-                <SevBadge s={a.severity} />
-                <span className="mono ml-auto truncate text-[11px] text-muted">{a.cve ?? a.id}</span>
-              </div>
-              <div className="mt-1.5 line-clamp-2 text-xs leading-snug text-[#c3cce0]">{a.summary}</div>
-              <div className="mono mt-1 truncate text-[10.5px] text-faint">
-                {a.packages[0]} → {a.services.join(", ")}
+              <div className="pt-0.5"><Priority p={a.priority} /></div>
+              <div className="min-w-0">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="mono truncate text-[11.5px] text-ink-2">{a.cve ?? a.id}</span>
+                  <Severity s={a.severity} />
+                </div>
+                <div className="mt-0.5 line-clamp-2 text-[13px] leading-snug">{a.summary}</div>
+                <div className="mono mt-1 truncate text-[10.5px] text-faint">
+                  {a.packages[0]} → {a.services.join(", ")}
+                </div>
               </div>
             </button>
           </li>
@@ -61,70 +58,69 @@ export function RiskBoard({ risk, activeId, onPick }: { risk: Risk | null; activ
 
 /* ------------------------------------------------------------------ memory */
 export function MemoryView({ brain, onReset }: { brain: Brain | null; onReset: () => void }) {
-  if (!brain) return <div className="flex justify-center py-10"><Spinner /></div>;
+  if (!brain) return <Loading what="Reading memory" />;
   const reused = brain.cases.reduce((a, c) => a + c.reused, 0);
-  const stats: [string, number][] = [
-    ["triage runs", brain.runs],
-    ["cases remembered", brain.cases.length],
-    ["precedents reused", reused],
+  const stats: [number, string][] = [
+    [brain.runs, "triage runs"],
+    [brain.cases.length, "cases kept"],
+    [reused, "times reused"],
   ];
   return (
-    <div className="scroll -mr-2 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pr-2">
-      <div className="grid grid-cols-3 gap-2">
-        {stats.map(([k, v]) => (
-          <motion.div key={k} layout className="rounded-xl border border-line bg-surface-2/60 p-2.5">
-            <div className="text-xl font-semibold tabular-nums">{v}</div>
-            <div className="text-[10.5px] leading-tight text-muted">{k}</div>
-          </motion.div>
+    <div className="scroll -mr-3 flex min-h-0 flex-1 flex-col overflow-y-auto pr-3">
+      <div className="grid grid-cols-3 border-y border-rule">
+        {stats.map(([n, k], i) => (
+          <div key={k} className={clsx("px-3 py-2.5", i > 0 && "border-l border-rule")}>
+            <div className="serif num text-[30px] leading-none">{n}</div>
+            <div className="mt-1.5 text-[10.5px] text-faint">{k}</div>
+          </div>
         ))}
       </div>
-      <section>
+
+      <section className="mt-5">
         <Label>Episodic · cases</Label>
         {brain.cases.length === 0 ? (
-          <Empty title="Memory is empty" hint="Triage a CVE and approve a decision. The next related advisory will cite it." />
+          <Empty title="Nothing remembered yet" hint="Triage a CVE and approve a decision. The next related advisory will cite it." />
         ) : (
-          <ol className="relative ml-1.5 border-l border-line-strong pl-4">
+          <ol>
             {[...brain.cases].reverse().map((c) => (
-              <li key={c.id} className="relative pb-3">
-                <span className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full border-2 border-violet bg-bg" />
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="mono text-violet">{c.id}</span>
-                  <Pill tone={c.decision === "patched" ? "good" : "warn"}>{c.decision.replace("_", " ")}</Pill>
+              <li key={c.id} className="border-b border-rule py-2.5">
+                <div className="flex items-baseline gap-2 text-[12.5px]">
+                  <span className="mono text-blue">{c.id}</span>
+                  <span className="font-medium capitalize">{c.decision.replace("_", " ")}</span>
                   <span className="ml-auto text-faint">{timeAgo(c.ts)}</span>
                 </div>
-                <div className="mt-0.5 text-[11px] text-muted">
-                  by {c.actor} · cited by <b className="text-fg">{c.reused}</b> later triage{c.reused === 1 ? "" : "s"}
+                <div className="mt-0.5 text-[12px] text-ink-2">
+                  by {c.actor} · cited by {c.reused} later triage{c.reused === 1 ? "" : "s"}
                 </div>
               </li>
             ))}
           </ol>
         )}
       </section>
-      <section>
+
+      <section className="mt-6">
         <Label>Procedural · playbooks</Label>
-        <div className="flex flex-col gap-2">
+        <ul>
           {brain.playbooks.map((p) => {
-            const t = p.successes + p.failures || 1;
+            const total = p.successes + p.failures;
             return (
-              <div key={p.key} className="rounded-xl border border-line bg-surface-2/60 p-3">
-                <div className="flex items-center gap-2 text-xs">
-                  <BookMarked className="h-3.5 w-3.5 text-violet" />
-                  <span className="mono">{p.key}</span>
-                  <span className="mono ml-auto text-good">{p.successes}✓</span>
-                  <span className="mono text-bad">{p.failures}✗</span>
+              <li key={p.key} className="border-b border-rule py-2.5">
+                <div className="mono text-[12px] break-words">{p.key}</div>
+                <div className="mono num mt-0.5 flex gap-3 whitespace-nowrap text-[11px]">
+                  <span className="text-green">{p.successes} worked</span>
+                  <span className={p.failures ? "text-red" : "text-faint"}>{p.failures} failed</span>
                 </div>
-                <div className="mt-2 h-1 rounded-full bg-line">
-                  <div className="h-1 rounded-full bg-good" style={{ width: `${(p.successes / t) * 100}%` }} />
+                <div className="mt-1.5 h-[3px] bg-rule">
+                  <div className="h-[3px] bg-green" style={{ width: total ? `${(p.successes / total) * 100}%` : 0 }} />
                 </div>
-                <p className="mt-2 text-[11px] leading-snug text-muted">{p.steps}</p>
-              </div>
+                <p className="mt-1.5 text-[12px] leading-snug text-ink-2">{p.steps}</p>
+              </li>
             );
           })}
-        </div>
+        </ul>
       </section>
-      <button onClick={onReset} className="mb-1 flex items-center justify-center gap-1.5 rounded-lg border border-line-strong py-2 text-xs text-muted transition hover:border-bad hover:text-bad">
-        <RotateCcw className="h-3.5 w-3.5" /> Reset demo memory
-      </button>
+
+      <button onClick={onReset} className="btn btn-quiet my-5 self-start">Reset demo memory</button>
     </div>
   );
 }
@@ -155,87 +151,101 @@ export function CompanyView({
     };
   }, [tenant, selected]);
 
-  // derived: a card is only shown if it belongs to the current tenant + selection
   const card = selected && loaded?.key === `${tenant}/${selected}` ? loaded.card : null;
   const loading = !!selected && !card;
-
   const services = [...(overview?.nodes ?? [])].sort((a, b) => b.centrality - a.centrality);
   const humans = card?.experts.filter((e) => e.kind !== "bot") ?? [];
   const bots = card?.experts.filter((e) => e.kind === "bot") ?? [];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex flex-wrap gap-1.5">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <Label>Services · by PageRank</Label>
+      <div className="flex flex-wrap gap-x-3.5 gap-y-1.5 border-b border-rule pb-3">
         {services.map((s) => (
           <button
             key={s.id}
             onClick={() => onSelect(s.id)}
             className={clsx(
-              "rounded-lg border px-2 py-1 text-[11px] transition",
-              selected === s.id ? "border-accent bg-accent/10 text-accent" : "border-line-strong text-muted hover:text-fg",
+              "text-[12.5px] underline-offset-4 hover:underline",
+              selected === s.id ? "font-semibold underline decoration-2" : "text-ink-2",
             )}
           >
             {s.id}
           </button>
         ))}
       </div>
-      <div className="scroll -mr-2 min-h-0 flex-1 overflow-y-auto pr-2">
-        {!selected && <Empty title="Pick a service" hint="Ownership, expertise and the decisions behind its dependencies, each traced to a source commit." />}
-        {loading && <div className="flex justify-center py-8"><Spinner /></div>}
-        {card && !loading && (
-          <div className="flex flex-col gap-5">
-            <section>
+
+      <div className="scroll -mr-3 min-h-0 flex-1 overflow-y-auto pr-3 pt-4">
+        {!selected && <Empty title="Pick a service" hint="Who owns it, who knows it, and the decisions behind its dependencies, each traced to a commit." />}
+        {loading && <Loading what="Querying the graph" />}
+        {card && (
+          <div className="fade-in">
+            <h3 className="serif text-[26px] leading-none">{card.service}</h3>
+            {card.exposure_path && (
+              <p className="mono mt-2 text-[11.5px] text-amber">▲ reachable from the internet via {card.exposure_path.join(" → ")}</p>
+            )}
+
+            <section className="mt-6 border-t border-rule pt-4">
               <Label>Owners · CODEOWNERS</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {card.owners.length ? card.owners.map((o) => (
-                  <Pill key={o.owner} tone={o.kind === "team" ? "violet" : "neutral"} className="max-w-full !leading-tight [overflow-wrap:anywhere] py-1">
-                    <User className="h-3 w-3 shrink-0" /> {o.owner}
-                  </Pill>
-                )) : <span className="text-xs text-muted">No CODEOWNERS entry. Nobody is accountable.</span>}
-              </div>
+              {card.owners.length ? (
+                <ul className="text-[13px]">
+                  {card.owners.map((o) => (
+                    <li key={o.owner} className="flex items-baseline gap-2 py-0.5">
+                      <span>{o.owner.split("/").map((part, i, a) => (<span key={i}>{part}{i < a.length - 1 && <>/<wbr /></>}</span>))}</span>
+                      <span className="label">{o.kind}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[13px] text-ink-2">No CODEOWNERS entry. Nobody is accountable for this service.</p>
+              )}
             </section>
-            <section>
+
+            <section className="mt-6 border-t border-rule pt-4">
               <Label>Expertise · commit history</Label>
-              <div className="flex flex-col gap-1">
+              {humans.length === 0 && (
+                <p className="text-[13px] text-ink-2">No human has touched this service&apos;s manifest. Automation maintains it.</p>
+              )}
+              <ul className="text-[13px]">
                 {humans.map((e) => (
-                  <div key={e.name} className="flex items-center gap-2 text-xs">
-                    <User className="h-3 w-3 text-muted" />
-                    <span>{e.name}</span>
-                    <span className="mono ml-auto text-faint">{e.commits} commits</span>
-                  </div>
+                  <li key={e.name} className="flex items-baseline py-0.5">
+                    {e.name}
+                    <span className="mono num ml-auto text-[11px] text-faint">{e.commits} commits</span>
+                  </li>
                 ))}
-                {humans.length === 0 && <span className="text-xs text-muted">No human commits to this service&apos;s manifest. It is maintained by automation.</span>}
                 {bots.map((e) => (
-                  <div key={e.name} className="flex items-center gap-2 text-xs text-muted">
-                    <Bot className="h-3 w-3" /> {e.name}
-                    <span className="mono ml-auto text-faint">{e.commits} commits</span>
-                  </div>
+                  <li key={e.name} className="flex items-baseline py-0.5 text-ink-2">
+                    {e.name} <span className="label ml-2">bot</span>
+                    <span className="mono num ml-auto text-[11px] text-faint">{e.commits} commits</span>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </section>
-            <section>
+
+            <section className="mt-6 border-t border-rule pt-4">
               <Label>Decisions · traced to source</Label>
-              <div className="flex flex-col gap-2">
-                {card.decisions.length === 0 && <span className="text-xs text-muted">No recorded dependency decisions.</span>}
+              {card.decisions.length === 0 && <p className="text-[13px] text-ink-2">No recorded dependency decisions.</p>}
+              <ul>
                 {card.decisions.map((d) => (
-                  <a key={d.id} href={d.source} target="_blank" rel="noreferrer"
-                     className="group rounded-xl border border-line bg-surface-2/50 p-2.5 transition hover:border-line-strong">
-                    <div className="flex items-start gap-2 text-xs leading-snug">
-                      <GitCommit className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
-                      <span>{d.text}</span>
+                  <li key={d.id} className="border-b border-rule py-2.5 first:pt-0">
+                    <a href={d.source} target="_blank" rel="noreferrer" className="block text-[13px] leading-snug hover:text-blue">
+                      {d.text}
+                    </a>
+                    <div className="mt-1 flex items-baseline gap-2 text-[11.5px] text-faint">
+                      <span>{d.author}</span>
+                      <span className="mono">{d.date.slice(0, 10)}</span>
+                      <span className={clsx("label ml-auto !text-[10px]", d.superseded_by ? "!text-amber" : "!text-green")}>
+                        {d.superseded_by ? "superseded" : "current"}
+                      </span>
                     </div>
-                    <div className="mt-1.5 flex items-center gap-2 text-[10.5px] text-faint">
-                      <span>{d.author}</span>·<span>{d.date.slice(0, 10)}</span>
-                      {d.superseded_by ? <Pill tone="warn" className="ml-auto"><History className="h-3 w-3" /> superseded</Pill> : <Pill tone="good" className="ml-auto">current</Pill>}
-                      <ExternalLink className="h-3 w-3 opacity-0 transition group-hover:opacity-100" />
-                    </div>
-                  </a>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </section>
-            <section>
-              <Label>Graph queries</Label>
-              <div className="flex flex-col gap-1">{card.traces.slice(0, 3).map((t, i) => <Cypher key={i} trace={t} />)}</div>
+
+            <section className="mt-6 border-t border-rule pt-4">
+              <Label>Graph queries behind this page</Label>
+              {card.traces.slice(0, 3).map((t, i) => <Cypher key={i} trace={t} />)}
             </section>
           </div>
         )}

@@ -11,189 +11,148 @@ if (!g.__brDagre) {
   g.__brDagre = true;
 }
 
-const ACCENT = "#35e0f2";
+function theme() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = (n: string) => cs.getPropertyValue(n).trim();
+  return {
+    paper: v("--paper"), panel: v("--panel"), sunk: v("--sunk"), ink: v("--ink"), ink2: v("--ink-2"),
+    faint: v("--faint"), rule: v("--rule-strong"), red: v("--red"), amber: v("--amber"),
+  };
+}
 
-const STYLE = [
-  {
-    selector: "node",
-    style: {
-      label: "data(label)",
-      color: "#c3cce0",
-      "font-size": 11,
-      "font-family": "Inter, system-ui, sans-serif",
-      "font-weight": 500,
-      "text-wrap": "ellipsis",
-      "text-max-width": "170px",
-      "background-color": "#121823",
-      "border-width": 1.5,
-      "border-color": "#2a3547",
-      "transition-property": "opacity, background-color, border-color, underlay-opacity, border-width",
-      "transition-duration": 320,
+const SANS = "IBM Plex Sans, system-ui, sans-serif";
+const MONO = "IBM Plex Mono, ui-monospace, monospace";
+
+/** A schematic, not a neon graph: square nodes, orthogonal edges, ink on paper, red only for the attack path. */
+function buildStyle(t: ReturnType<typeof theme>) {
+  return [
+    {
+      selector: "node",
+      style: {
+        label: "data(label)", color: t.ink, "font-family": SANS, "font-size": 11, "font-weight": 500,
+        "text-wrap": "ellipsis", "text-max-width": "190px",
+        "background-color": t.panel, "border-width": 1, "border-color": t.ink,
+        "transition-property": "opacity, background-color, border-color, border-width", "transition-duration": 260,
+      },
     },
-  },
-  {
-    selector: "node.ov",
-    style: {
-      shape: "ellipse",
-      width: "data(size)",
-      height: "data(size)",
-      "text-valign": "bottom",
-      "text-margin-y": 7,
-      "font-size": 12,
+    {
+      selector: "node.ov",
+      style: {
+        shape: "ellipse", width: "data(size)", height: "data(size)", "text-valign": "bottom", "text-margin-y": 6,
+        "background-color": t.paper, "border-color": t.ink2,
+      },
     },
-  },
-  {
-    selector: "node.fx[type='service']",
-    style: {
-      shape: "round-rectangle",
-      width: "data(w)",
-      height: 32,
-      "text-valign": "center",
-      "text-halign": "center",
-      "border-color": "#3b4a63",
-      color: "#e8ecf4",
-      "font-weight": 600,
+    { selector: "node.ov.exposed", style: { "border-style": "double", "border-width": 4, "border-color": t.amber } },
+    {
+      selector: "node.fx[type='service']",
+      style: {
+        shape: "rectangle", width: "data(w)", height: 30, "text-valign": "center", "text-halign": "center",
+        "font-weight": 600, "font-size": 12, "border-width": 1.25, "background-color": t.panel,
+      },
     },
-  },
-  {
-    selector: "node.fx[type='package']",
-    style: {
-      shape: "round-rectangle",
-      width: "data(w)",
-      height: 26,
-      "text-valign": "center",
-      "text-halign": "center",
-      "font-family": "JetBrains Mono, ui-monospace, monospace",
-      "font-size": 10,
-      color: "#9aa7bf",
+    {
+      selector: "node.fx[type='package']",
+      style: {
+        shape: "rectangle", width: "data(w)", height: 24, "text-valign": "center", "text-halign": "center",
+        "font-family": MONO, "font-size": 10, "font-weight": 400, color: t.ink2, "border-color": t.rule,
+        "background-color": t.paper,
+      },
     },
-  },
-  {
-    selector: "node.fx[type='vuln']",
-    style: {
-      shape: "round-rectangle",
-      width: "data(w)",
-      height: 30,
-      "text-valign": "center",
-      "text-halign": "center",
-      "font-family": "JetBrains Mono, ui-monospace, monospace",
-      "font-size": 10.5,
-      "font-weight": 600,
-      color: "#fff",
-      "background-color": "#3a1420",
-      "border-color": "#ff4d6d",
+    {
+      selector: "node.fx[type='vuln']",
+      style: {
+        shape: "rectangle", width: "data(w)", height: 28, "text-valign": "center", "text-halign": "center",
+        "font-family": MONO, "font-size": 10.5, "font-weight": 600, color: t.paper,
+        "background-color": t.red, "border-color": t.red,
+      },
     },
-  },
-  {
-    selector: "node.exposed",
-    style: {
-      "border-color": "#ffb547",
-      "underlay-color": "#ffb547",
-      "underlay-opacity": 0.16,
-      "underlay-padding": 9,
-      "underlay-shape": "ellipse",
+    { selector: "node.fx.exposed", style: { "border-style": "double", "border-width": 4, "border-color": t.amber } },
+    { selector: "node.dim", style: { opacity: 0.3 } },
+    { selector: "node.lit", style: { "border-color": t.red, "border-width": 1.75 } },
+    { selector: "node.lit[type='service']", style: { "border-color": t.red } },
+    { selector: "node.sel", style: { "border-color": t.ink, "border-width": 3 } },
+    {
+      selector: "edge",
+      style: {
+        width: 1, "curve-style": "taxi", "taxi-direction": "auto", "taxi-turn": "50%", "line-color": t.rule,
+        "target-arrow-color": t.rule, "target-arrow-shape": "triangle", "arrow-scale": 0.7,
+        "transition-property": "opacity, line-color, width, target-arrow-color", "transition-duration": 260,
+      },
     },
-  },
-  {
-    selector: "node.vuln.hit",
-    style: { "underlay-color": "#ff4d6d", "underlay-opacity": 0.32, "underlay-padding": 12, "border-width": 2.5 },
-  },
-  { selector: "node.dim", style: { opacity: 0.28 } },
-  {
-    selector: "node.lit",
-    style: { "border-color": ACCENT, "border-width": 2, opacity: 1, "underlay-color": ACCENT, "underlay-opacity": 0.14, "underlay-padding": 8 },
-  },
-  { selector: "node.lit.vuln", style: { "border-color": "#ff4d6d" } },
-  { selector: "node.sel", style: { "border-color": "#ffffff", "border-width": 2.5 } },
-  {
-    selector: "edge",
-    style: {
-      width: 1.3,
-      "curve-style": "bezier",
-      "line-color": "#2a3547",
-      "target-arrow-color": "#2a3547",
-      "target-arrow-shape": "triangle",
-      "arrow-scale": 0.8,
-      opacity: 0.9,
-      "transition-property": "opacity, line-color, width, target-arrow-color",
-      "transition-duration": 320,
-    },
-  },
-  { selector: "edge[type='DEPENDS_ON']", style: { "line-style": "dashed", "line-dash-pattern": [5, 4] } },
-  { selector: "edge.dim", style: { opacity: 0.12 } },
-  {
-    selector: "edge.lit",
-    style: { "line-color": ACCENT, "target-arrow-color": ACCENT, width: 2.8, opacity: 1, "z-index": 10 },
-  },
-] as unknown as cytoscape.StylesheetJson;
+    { selector: "edge.ov", style: { "curve-style": "bezier", opacity: 0.7 } },
+    { selector: "edge.fe", style: { "taxi-direction": "vertical" } },
+    { selector: "edge[type='DEPENDS_ON']", style: { "line-style": "dashed", "line-dash-pattern": [4, 3] } },
+    { selector: "edge.dim", style: { opacity: 0.2 } },
+    { selector: "edge.lit", style: { "line-color": t.red, "target-arrow-color": t.red, width: 2, opacity: 1, "z-index": 10 } },
+  ] as unknown as cytoscape.StylesheetJson;
+}
 
 type Props = {
   overview: GraphData | null;
   focus: Subgraph | null;
   replayKey: number;
-  panelOpen: boolean;
   selected: string | null;
   onSelect: (service: string) => void;
 };
 
-function overviewElements(o: GraphData, exposedBy: Set<string>): ElementDefinition[] {
+function overviewElements(o: GraphData): ElementDefinition[] {
   const max = Math.max(...o.nodes.map((n) => n.centrality), 1e-9);
   return [
     ...o.nodes.map((n) => ({
-      data: { id: n.id, label: n.id, type: "service", size: 24 + 26 * (n.centrality / max) },
-      classes: "ov" + (n.exposed || exposedBy.has(n.id) ? " exposed" : ""),
+      data: { id: n.id, label: n.id, type: "service", size: 16 + 24 * (n.centrality / max) },
+      classes: "ov" + (n.exposed ? " exposed" : ""),
     })),
-    ...o.edges.map((e, i) => ({ data: { id: `e${i}`, source: e.source, target: e.target, type: "CALLS" } })),
+    ...o.edges.map((e, i) => ({ data: { id: `e${i}`, source: e.source, target: e.target, type: "CALLS" }, classes: "ov" })),
   ];
 }
 
-function focusElements(f: Subgraph): ElementDefinition[] {
+function focusElements(f: Subgraph, exposed: Set<string>): ElementDefinition[] {
   return [
     ...f.nodes.map((n) => {
-      const per = n.type === "service" ? 7.4 : 6.2;
-      const w = Math.min(n.label.length, 26) * per + 28;
-      return { data: { id: n.id, label: n.label, type: n.type, w }, classes: `fx ${n.type}` };
+      const per = n.type === "service" ? 7.6 : 6.3;
+      const w = Math.min(n.label.length, 28) * per + 26;
+      return {
+        data: { id: n.id, label: n.label, type: n.type, w },
+        classes: `fx ${n.type}${exposed.has(n.id) ? " exposed" : ""}`,
+      };
     }),
-    ...f.edges.map((e, i) => ({ data: { id: `f${i}`, source: e.source, target: e.target, type: e.type } })),
+    ...f.edges.map((e, i) => ({ data: { id: `f${i}`, source: e.source, target: e.target, type: e.type }, classes: "fe" })),
   ];
 }
 
-/** Fit the graph into the free area between the floating panels. */
-function fitFree(c: Core, hasRight: boolean, maxZoom: number) {
-  if (c.elements().length === 0) return;
-  const lg = window.innerWidth >= 1024;
-  const left = lg ? 392 : 16, right = lg && hasRight ? 436 : 16, top = lg ? 130 : 16, bottom = lg ? 72 : 16;
-  const bb = c.elements().boundingBox({ includeLabels: true });
-  const aw = Math.max(c.width() - left - right, 120), ah = Math.max(c.height() - top - bottom, 120);
-  const z = Math.min(aw / Math.max(bb.w, 1), ah / Math.max(bb.h, 1), maxZoom);
-  c.zoom(z);
-  c.pan({ x: left + (aw - bb.w * z) / 2 - bb.x1 * z, y: top + (ah - bb.h * z) / 2 - bb.y1 * z });
-}
-
-export default function GraphCanvas({ overview, focus, replayKey, panelOpen, selected, onSelect }: Props) {
+export default function GraphCanvas({ overview, focus, replayKey, selected, onSelect }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const cy = useRef<Core | null>(null);
   const timers = useRef<number[]>([]);
   const onSelectRef = useRef(onSelect);
-  const hasFocus = useRef(false);
   useEffect(() => {
     onSelectRef.current = onSelect;
-    hasFocus.current = panelOpen;
   });
 
   useEffect(() => {
     if (!host.current) return;
-    const c = cytoscape({ container: host.current, style: STYLE, wheelSensitivity: 0.25, minZoom: 0.2, maxZoom: 2.5 });
+    const c = cytoscape({
+      container: host.current, style: buildStyle(theme()), wheelSensitivity: 0.3, minZoom: 0.2, maxZoom: 3,
+    });
     cy.current = c;
     (window as unknown as { __cy?: Core }).__cy = c;
     c.on("tap", "node.ov", (ev) => onSelectRef.current(ev.target.id()));
-    const ro = new ResizeObserver(() => {
+    const fit = () => {
       c.resize();
-      fitFree(c, hasFocus.current, hasFocus.current ? 1.25 : 1);
-    });
+      if (c.elements().length) c.fit(undefined, 44);
+      if (c.zoom() > 1.15) {
+        c.zoom(1.15);
+        c.center();
+      }
+    };
+    const ro = new ResizeObserver(fit);
     ro.observe(host.current);
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onScheme = () => c.style(buildStyle(theme()));
+    mq.addEventListener("change", onScheme);
     return () => {
       ro.disconnect();
+      mq.removeEventListener("change", onScheme);
       timers.current.forEach(clearTimeout);
       c.destroy();
     };
@@ -206,12 +165,21 @@ export default function GraphCanvas({ overview, focus, replayKey, panelOpen, sel
     timers.current = [];
     c.elements().remove();
     const layout = (opts: object) =>
-      c.layout({ name: "dagre", rankDir: "LR", nodeSep: 26, rankSep: 90, padding: 30, animate: false, ...opts } as never).run();
+      c.layout({ name: "dagre", rankDir: "LR", nodeSep: 22, rankSep: 80, padding: 20, animate: false, ...opts } as never).run();
+    const fit = (cap: number) => {
+      c.resize();
+      c.fit(undefined, 44);
+      if (c.zoom() > cap) {
+        c.zoom(cap);
+        c.center();
+      }
+    };
 
     if (focus && focus.nodes.length) {
-      c.add(focusElements(focus));
-      layout({ rankDir: "TB", rankSep: 46, nodeSep: 30 });
-      fitFree(c, true, 1.25);
+      const exposed = new Set(overview?.nodes.filter((n) => n.exposed).map((n) => n.id) ?? []);
+      c.add(focusElements(focus, exposed));
+      layout({ rankDir: "TB", rankSep: 42, nodeSep: 28 });
+      fit(1.3);
       c.elements().addClass("dim");
       const edges = c.edges().toArray().sort((a, b) => (a.data("type") === "CALLS" ? 0 : 1) - (b.data("type") === "CALLS" ? 0 : 1));
       edges.forEach((e, i) => {
@@ -220,19 +188,15 @@ export default function GraphCanvas({ overview, focus, replayKey, panelOpen, sel
             e.removeClass("dim").addClass("lit");
             e.source().removeClass("dim").addClass("lit");
             e.target().removeClass("dim").addClass("lit");
-          }, 350 + i * 420),
+          }, 300 + i * 380),
         );
       });
-      timers.current.push(
-        window.setTimeout(() => c.nodes(".vuln").addClass("hit"), 350 + edges.length * 420 + 100),
-      );
     } else if (overview) {
-      const exposed = new Set(overview.nodes.filter((n) => n.exposed).map((n) => n.id));
-      c.add(overviewElements(overview, exposed));
+      c.add(overviewElements(overview));
       layout({});
-      fitFree(c, panelOpen, 1);
+      fit(1.25);
     }
-  }, [overview, focus, replayKey, panelOpen]);
+  }, [overview, focus, replayKey]);
 
   useEffect(() => {
     const c = cy.current;

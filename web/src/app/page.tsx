@@ -1,36 +1,26 @@
 "use client";
 
 import clsx from "clsx";
-import { AnimatePresence, motion } from "framer-motion";
-import { Brain as BrainIcon, Building2, CornerDownLeft, Play, Search, ShieldAlert, ShieldCheck, Sparkles, Square, Waypoints, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import GraphCanvas from "@/components/GraphCanvas";
 import ResultPanel from "@/components/ResultPanel";
 import { CompanyView, MemoryView, RiskBoard } from "@/components/Views";
-import { Pill, Spinner } from "@/components/ui";
+import { Label } from "@/components/ui";
 import { api, AskResult, Brain, GraphData, healthy, ID_RE, Risk, TenantInfo, TriageResult } from "@/lib/api";
 
 type Tab = "risk" | "memory" | "company";
-const cn = clsx;
-
-const TABS: { id: Tab; label: string; icon: typeof ShieldAlert }[] = [
-  { id: "risk", label: "Risk board", icon: ShieldAlert },
-  { id: "memory", label: "Memory", icon: BrainIcon },
-  { id: "company", label: "Company", icon: Building2 },
+const TABS: { id: Tab; label: string }[] = [
+  { id: "risk", label: "Risk board" },
+  { id: "memory", label: "Memory" },
+  { id: "company", label: "Company" },
 ];
 
-const STATIC_SAMPLES = [
-  { label: "Log4Shell (no Java deps here)", q: "GHSA-jfh8-c2jp-5v3q" },
-  { label: "Who owns paymentservice?", q: "who owns paymentservice?" },
-  { label: "What is the blast radius of checkout?", q: "blast radius of checkoutservice" },
-];
-
-function Logo() {
+function Mark() {
   return (
-    <svg width="26" height="26" viewBox="0 0 32 32" fill="none" aria-hidden>
-      <circle cx="16" cy="16" r="3" fill="#ff4d6d" />
-      <circle cx="16" cy="16" r="8" stroke="#35e0f2" strokeOpacity=".7" strokeWidth="1.5" strokeDasharray="3 3" />
-      <circle cx="16" cy="16" r="13" stroke="#35e0f2" strokeOpacity=".3" strokeWidth="1.5" />
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden className="translate-y-[3px]">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="12" cy="12" r="5.5" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="12" cy="12" r="1.8" fill="var(--red)" />
     </svg>
   );
 }
@@ -49,23 +39,26 @@ export default function Home() {
   const [replayKey, setReplayKey] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [focused, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const caseRef = useRef<HTMLElement>(null);
 
   const refreshBrain = useCallback((t: string) => api.brain(t).then(setBrain).catch(() => {}), []);
   const refreshRisk = useCallback((t: string) => api.risk(t).then(setRisk).catch((e) => setError(String(e))), []);
 
   useEffect(() => {
-    api.tenants().then((t) => {
-      setTenants(t);
-      if (t.length && !t.find((x) => x.id === "boutique")) setTenant(t[0].id);
-    }).catch(() => setError("Cannot reach the Blastradius API. Is the backend running on :8000 and FalkorDB up?"));
+    api
+      .tenants()
+      .then((t) => {
+        setTenants(t);
+        if (t.length && !t.find((x) => x.id === "boutique")) setTenant(t[0].id);
+      })
+      .catch(() => setError("Cannot reach the Blastradius API. Is the backend running on :8000 and FalkorDB up?"));
   }, []);
 
-  const tenantRef = useRef(tenant);
+  const runId = result?.run_id;
   useEffect(() => {
-    tenantRef.current = tenant;
-  }, [tenant]);
+    caseRef.current?.scrollTo({ top: 0 });
+  }, [runId]);
 
   const [evalInfo, setEvalInfo] = useState<{ passed: number; total: number } | null>(null);
   useEffect(() => {
@@ -86,6 +79,11 @@ export default function Home() {
       clearInterval(id);
     };
   }, []);
+
+  const tenantRef = useRef(tenant);
+  useEffect(() => {
+    tenantRef.current = tenant;
+  }, [tenant]);
 
   const switchTenant = useCallback((id: string) => {
     if (id === tenantRef.current) return; // same tenant: keep loaded data, nothing to refetch
@@ -136,25 +134,23 @@ export default function Home() {
           setReplayKey((k) => k + 1);
           refreshBrain(t);
           return r;
+        }
+        const a = await api.ask(tenant, q);
+        setAnswer(a);
+        if (a.triage) {
+          setResult(a.triage);
+          setReplayKey((k) => k + 1);
+          refreshBrain(tenant);
         } else {
-          const a = await api.ask(tenant, q);
-          setAnswer(a);
-          if (a.triage) {
-            setResult(a.triage);
-            setReplayKey((k) => k + 1);
-            refreshBrain(tenant);
-          } else {
-            const m = q.toLowerCase();
-            const svc = overview?.nodes.find((n) => m.includes(n.id))?.id;
-            if (svc) {
-              setTab("company");
-              setSelected(svc);
-              setResult(null);
-            }
+          const svc = overview?.nodes.find((n) => q.toLowerCase().includes(n.id))?.id;
+          if (svc) {
+            setTab("company");
+            setSelected(svc);
+            setResult(null);
           }
         }
       } catch (e) {
-        setError(String(e));
+        setError(e instanceof Error ? e.message : String(e));
       } finally {
         setRunning(false);
       }
@@ -184,7 +180,7 @@ export default function Home() {
       await sleep(1800);
       await say(1, "A critical CVE lands: arbitrary code execution in protobufjs. Which of our services are exposed?", 2200);
       const r1 = await run("CVE-2026-41242", "boutique");
-      await say(2, "The agent walks the graph: internet-exposed frontend → payment → gRPC loader → vulnerable protobufjs. A deterministic judge, not the LLM, decides.", 7000);
+      await say(2, "The agent walks the graph: internet-exposed frontend, then payment, then the gRPC loader, down to the vulnerable protobufjs. A deterministic judge decides, not the LLM.", 7000);
       if (r1?.advisory) {
         await say(3, "A human approves the fix. The decision is written back into the graph as episodic memory.", 1800);
         await api.decide("boutique", {
@@ -196,12 +192,12 @@ export default function Home() {
       }
       await say(4, "Days later, a different protobufjs advisory arrives.", 1800);
       await run("CVE-2026-48712", "boutique");
-      await say(4, "Memory kicks in: the agent cites the earlier case, found by traversal (advisory → package → case), and reuses the playbook.", 7000);
+      await say(4, "Memory kicks in: the agent cites the earlier case, found by traversal from advisory to package to case, and reuses the playbook.", 7000);
       setTab("memory");
       await say(5, "Cases, reuse counts and playbook success rates all live in the same FalkorDB graph.", 4500);
       setTab("risk");
       await run("GHSA-jfh8-c2jp-5v3q", "boutique");
-      await say(6, "Log4Shell? Proven not affected: the traversal returns zero paths. Absence of a path is evidence.", 6000);
+      await say(6, "Log4Shell? Proven not affected: the traversal returns zero paths. The absence of a path is evidence.", 6000);
       setResult(null);
       setTab("company");
       setSelected("paymentservice");
@@ -233,8 +229,9 @@ export default function Home() {
   const samples = useMemo(() => {
     const top = (risk?.advisories ?? []).filter((a) => a.priority === "P0").slice(0, 3);
     return [
-      ...top.map((a) => ({ label: `${a.cve ?? a.id} · ${a.packages[0]?.split("@")[0]}`, q: a.cve ?? a.id })),
-      ...STATIC_SAMPLES,
+      ...top.map((a) => ({ label: `Critical ${a.packages[0]?.split("@")[0]} advisory`, q: a.cve ?? a.id })),
+      { label: "Log4Shell, in a stack with no Java", q: "GHSA-jfh8-c2jp-5v3q" },
+      { label: "Who owns paymentservice?", q: "who owns paymentservice?" },
     ];
   }, [risk]);
 
@@ -244,210 +241,185 @@ export default function Home() {
   const isUp = online && tenants.length > 0;
 
   return (
-    <main className="relative flex h-dvh flex-col overflow-y-auto lg:block lg:overflow-hidden">
-      {/* header */}
-      <header className="glass z-30 flex min-h-14 shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-x-0 border-t-0 px-4 py-2 lg:absolute lg:inset-x-0 lg:top-0 lg:h-14 lg:flex-nowrap lg:py-0">
-        <div className="flex items-center gap-2.5">
-          <Logo />
-          <div className="leading-none">
-            <div className="text-[15px] font-semibold tracking-tight">Blastradius</div>
-            <div className="mt-0.5 hidden text-[10.5px] text-muted sm:block">supply-chain triage · powered by a graph</div>
-          </div>
+    <main className="flex h-dvh flex-col overflow-y-auto lg:overflow-hidden">
+      <header className="flex shrink-0 flex-wrap items-center gap-x-7 gap-y-2 border-b border-rule px-5 py-2.5 lg:h-12 lg:flex-nowrap lg:py-0">
+        <div className="flex items-baseline gap-2.5">
+          <Mark />
+          <span className="serif text-[22px] font-medium leading-none tracking-[-0.01em]">Blastradius</span>
+          <span className="label hidden xl:inline">supply-chain triage on a graph</span>
         </div>
-        <div className="ml-2 flex items-center rounded-lg border border-line bg-bg/60 p-0.5" role="tablist" aria-label="Tenant">
+        <nav className="flex gap-5" aria-label="Tenant">
           {tenants.map((t) => (
             <button
               key={t.id}
-              role="tab"
-              aria-selected={tenant === t.id}
               onClick={() => switchTenant(t.id)}
-              className={clsx("whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium transition", tenant === t.id ? "bg-surface-2 text-fg shadow-sm" : "text-muted hover:text-fg")}
+              aria-current={tenant === t.id}
+              className={clsx(
+                "whitespace-nowrap border-b-2 py-1 text-[13px] transition-colors",
+                tenant === t.id ? "border-ink font-medium" : "border-transparent text-ink-2 hover:text-ink",
+              )}
             >
               {t.title}
             </button>
           ))}
-        </div>
-        <button
-          onClick={() => (demo ? (cancelDemo.current = true) : playDemo())}
-          className={clsx(
-            "flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition",
-            demo
-              ? "border-bad/50 text-bad hover:bg-bad/10"
-              : cn("border-accent/50 text-accent hover:bg-accent/10", !result && !answer && "shadow-[0_0_0_3px_rgba(53,224,242,0.10)]"),
-          )}
-        >
-          {demo ? <><Square className="h-3 w-3" /> Stop demo</> : <><Play className="h-3 w-3" /> Guided demo</>}
-        </button>
-        <div className="ml-auto hidden items-center gap-3 md:flex">
-          <Pill tone={isUp ? "good" : "bad"} className="gap-1.5 py-1">
-            <span className={clsx("h-1.5 w-1.5 rounded-full", isUp ? "bg-good" : "bg-bad animate-pulse")} />
+        </nav>
+        <div className="ml-auto flex items-center gap-5">
+          <span className="mono num hidden items-center gap-2 text-[11px] text-ink-2 md:flex">
+            <i className={clsx("inline-block h-[7px] w-[7px]", isUp ? "bg-green" : "bg-red")} />
             {isUp ? `FalkorDB · ${nodeCount.toLocaleString()} nodes · ${edgeCount.toLocaleString()} edges` : "FalkorDB offline"}
-          </Pill>
+          </span>
           {evalInfo && (
-            <Pill tone={evalInfo.passed === evalInfo.total ? "good" : "warn"} className="py-1" >
-              <ShieldCheck className="h-3 w-3" /> {evalInfo.passed}/{evalInfo.total} evals vs independent ground truth
-            </Pill>
+            <span className="mono hidden text-[11px] text-ink-2 xl:block" title="python -m evals.run, computed without the graph">
+              {evalInfo.passed}/{evalInfo.total} evals pass
+            </span>
           )}
+          <button className={clsx("btn", !demo && "btn-solid")} onClick={() => (demo ? (cancelDemo.current = true) : playDemo())}>
+            {demo ? "Stop demo" : "Guided demo"}
+          </button>
         </div>
       </header>
 
-      {/* canvas */}
-      <div className="relative h-[46vh] shrink-0 lg:absolute lg:inset-0 lg:h-auto">
-        <div className="grid-bg absolute inset-0" />
-        <GraphCanvas overview={overview} focus={result?.subgraph ?? null} replayKey={replayKey} panelOpen={!!result} selected={selected} onSelect={(s) => { setSelected(s); setTab("company"); }} />
-        {!overview && !error && <div className="absolute inset-0 flex items-center justify-center"><Spinner className="h-5 w-5" /></div>}
-        <div className="pointer-events-none absolute bottom-4 left-1/2 hidden -translate-x-1/2 items-center gap-4 rounded-full border border-line bg-surface/80 px-4 py-1.5 text-[11px] text-muted backdrop-blur lg:flex">
-          <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full border border-warn bg-warn/30" /> internet-exposed</span>
-          <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-accent" /> traversed path</span>
-          <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-bad" /> vulnerable package</span>
-          <span className="text-faint">{result ? "dependency chain, hop by hop" : "node size = PageRank"}</span>
+      {!online && (
+        <div role="alert" className="border-b border-red bg-red-tint px-5 py-2 text-[13px] text-red">
+          <b>FalkorDB is offline.</b> Blastradius has nothing to say without the graph: every verdict is a traversal, so there is no fallback and no
+          cached answer. It resumes the moment the database is back.
         </div>
-      </div>
+      )}
 
-      {/* graph-down banner: proves the graph is load-bearing */}
-      <AnimatePresence>
-        {!online && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="glass fixed left-1/2 top-[40vh] z-50 w-[min(520px,calc(100%-2rem))] -translate-x-1/2 rounded-2xl border-bad/60 px-5 py-4 text-center lg:left-[calc(50%+8px)]"
-            role="alert"
-          >
-            <div className="text-sm font-semibold text-bad">FalkorDB is offline</div>
-            <p className="mt-1 text-xs leading-snug text-muted">
-              Blastradius has nothing to say without the graph. Every verdict is a traversal, so there is no fallback and no cached answer.
-              Bring the database back and it resumes instantly.
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* guided-demo caption */}
-      <AnimatePresence>
-        {demo && (
-          <motion.div
-            key="caption"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 16 }}
-            className="glass fixed bottom-16 left-1/2 z-40 w-[min(720px,calc(100%-2rem))] -translate-x-1/2 rounded-2xl border-accent/40 px-5 py-3.5 lg:bottom-14 lg:left-[calc(50%+8px)]"
-            role="status"
-            aria-live="polite"
-          >
-            <div className="flex items-center gap-1.5">
-              {Array.from({ length: demo.total }).map((_, k) => (
-                <span key={k} className={clsx("h-1 flex-1 rounded-full", k < demo.i ? "bg-accent" : "bg-line-strong")} />
-              ))}
-            </div>
-            <p className="mt-2.5 text-[15px] font-medium leading-snug">{demo.text}</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* command bar */}
-      <div className="relative z-20 mx-auto w-full max-w-[640px] px-4 pt-3 lg:absolute lg:left-1/2 lg:top-[68px] lg:-translate-x-1/2 lg:pt-0">
-        <div className={clsx("glass flex items-center gap-2 rounded-2xl px-3.5 py-2.5 transition", focused && "border-accent/60 shadow-[0_0_0_4px_rgba(53,224,242,0.08)]")}>
-          {running ? <Spinner /> : <Search className="h-4 w-4 text-muted" />}
-          <input
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setTimeout(() => setFocused(false), 120)}
-            onKeyDown={(e) => e.key === "Enter" && run(input)}
-            placeholder="Paste a CVE / GHSA id, or ask: who owns paymentservice?"
-            aria-label="Triage a vulnerability or ask a question"
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-faint"
-          />
-          <kbd className="mono hidden rounded border border-line-strong px-1.5 py-0.5 text-[10px] text-faint sm:block">Ctrl K</kbd>
-          <button onClick={() => run(input)} className="flex items-center gap-1 rounded-lg bg-accent px-2.5 py-1 text-xs font-semibold text-bg transition hover:brightness-110" aria-label="Run">
-            Run <CornerDownLeft className="h-3 w-3" />
-          </button>
-        </div>
-        <AnimatePresence>
-          {focused && !input && (
-            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="glass mt-2 rounded-2xl p-2">
-              <div className="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">Try</div>
-              {samples.map((s) => (
-                <button
-                  key={s.q}
-                  onMouseDown={(e) => { e.preventDefault(); setInput(s.q); run(s.q); }}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-[#c3cce0] hover:bg-surface-2"
-                >
-                  <Sparkles className="h-3 w-3 text-accent" /> {s.label}
-                  <span className="mono ml-auto truncate text-[10px] text-faint">{s.q}</span>
-                </button>
-              ))}
-            </motion.div>
+      <div className="flex flex-col lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[340px_minmax(0,1fr)_430px]">
+        {/* left: lists */}
+        <aside className="flex min-h-[480px] flex-col border-rule px-5 pb-4 pt-3 max-lg:order-3 max-lg:border-t lg:min-h-0 lg:border-r">
+          <div className="mb-3 flex gap-5 border-b border-rule" role="tablist">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                role="tab"
+                aria-selected={tab === t.id}
+                onClick={() => setTab(t.id)}
+                className={clsx(
+                  "-mb-px border-b-2 pb-2 text-[13px] transition-colors",
+                  tab === t.id ? "border-ink font-medium" : "border-transparent text-ink-2 hover:text-ink",
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {tab === "risk" && <RiskBoard risk={risk} activeId={result?.advisory?.id} onPick={run} />}
+          {tab === "memory" && (
+            <MemoryView brain={brain} onReset={async () => { await api.reset(tenant); setResult(null); refreshBrain(tenant); }} />
           )}
-        </AnimatePresence>
-        <AnimatePresence>
+          {tab === "company" && (
+            <CompanyView tenant={tenant} overview={overview} selected={selected} onSelect={setSelected} />
+          )}
+        </aside>
+
+        {/* centre: command + graph */}
+        <section className="relative flex flex-col max-lg:order-1 lg:min-h-0">
+          <form
+            onSubmit={(e) => { e.preventDefault(); run(input); }}
+            className="flex items-center gap-3 border-b border-rule px-5 py-2.5"
+          >
+            <span className="mono text-[15px] text-faint" aria-hidden>›</span>
+            <input
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Paste a CVE or GHSA id, or ask a question"
+              aria-label="Triage a vulnerability or ask a question"
+              className="min-w-0 flex-1 bg-transparent py-1 text-[14px] outline-none placeholder:text-faint"
+            />
+            <span className="label hidden sm:block">ctrl k</span>
+            <button type="submit" className="btn btn-solid" disabled={running}>{running ? "Working…" : "Run"}</button>
+          </form>
+
           {(answer || (error && online)) && (
-            <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              className={clsx("glass mt-2 rounded-2xl p-3.5 text-sm", error && "border-bad/50")}>
-              <div className="flex items-start gap-2">
-                <div className="min-w-0 flex-1">
-                  {error ? <p className="text-bad">{error}</p> : <p className="whitespace-pre-wrap leading-snug">{answer?.answer}</p>}
-                  {answer && (
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      {answer.tool_calls.map((t, i) => <Pill key={i} tone="accent" className="mono">{t.tool}</Pill>)}
-                      <Pill>{answer.mode === "gemini" ? "Gemini free tier" : "offline router · $0"}</Pill>
-                    </div>
-                  )}
-                </div>
-                <button onClick={() => { setAnswer(null); setError(null); }} aria-label="Dismiss" className="text-faint hover:text-fg"><X className="h-4 w-4" /></button>
+            <div className="fade-in flex items-start gap-4 border-b border-rule bg-panel px-5 py-3">
+              <div className="min-w-0 flex-1">
+                {error && !answer ? (
+                  <p className="text-[13px] text-red">{error}</p>
+                ) : (
+                  <>
+                    <p className="serif whitespace-pre-wrap text-[17px] leading-snug">{answer?.answer}</p>
+                    <p className="mono mt-1.5 text-[10.5px] text-faint">
+                      {answer?.tool_calls.map((t) => t.tool).join(" · ")} · {answer?.mode === "gemini" ? "Gemini free tier" : "offline router, no LLM"}
+                    </p>
+                  </>
+                )}
               </div>
-            </motion.div>
+              <button onClick={() => { setAnswer(null); setError(null); }} aria-label="Dismiss" className="mono text-[15px] leading-none text-faint hover:text-ink">×</button>
+            </div>
           )}
-        </AnimatePresence>
+
+          <div className="relative min-h-[360px] flex-1">
+            <GraphCanvas overview={overview} focus={result?.subgraph ?? null} replayKey={replayKey} selected={selected}
+              onSelect={(s) => { setSelected(s); setTab("company"); }} />
+            {!overview && !error && <div className="mono absolute inset-0 flex items-center justify-center text-[11px] text-faint">Loading graph…</div>}
+            <div className="mono pointer-events-none absolute bottom-3 left-5 flex flex-wrap gap-x-5 gap-y-1 text-[10.5px] text-ink-2">
+              <span><i className="mr-1.5 inline-block h-[9px] w-[9px] border-[3px] border-double border-amber align-[-1px]" />internet-exposed</span>
+              <span><i className="mr-1.5 inline-block h-[2px] w-3.5 bg-red align-middle" />attack path</span>
+              <span><i className="mr-1.5 inline-block h-[9px] w-[9px] bg-red align-[-1px]" />vulnerable package</span>
+              {!result && <span className="text-faint">node size = PageRank</span>}
+            </div>
+            {demo && (
+              <div className="fade-in absolute inset-x-0 bottom-0 z-10 bg-ink text-paper" role="status" aria-live="polite">
+                <div className="h-[2px] bg-paper/20"><div className="h-[2px] bg-paper transition-all duration-500" style={{ width: `${(demo.i / demo.total) * 100}%` }} /></div>
+                <div className="flex items-start gap-4 px-5 py-3.5">
+                  <span className="mono num pt-1 text-[11px] opacity-60">{String(demo.i).padStart(2, "0")}/{String(demo.total).padStart(2, "0")}</span>
+                  <p className="serif text-[18px] leading-snug">{demo.text}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* right: case file or orientation */}
+        <aside ref={caseRef} className="scroll border-rule bg-panel lg:min-h-0 lg:overflow-y-auto px-6 py-5 max-lg:order-2 max-lg:border-t lg:border-l">
+          {result ? (
+            <ResultPanel key={result.run_id} r={result} tenant={tenant} onReplay={() => setReplayKey((k) => k + 1)}
+              onDecided={() => { refreshBrain(tenant); refreshRisk(tenant); }} />
+          ) : (
+            <div className="fade-in">
+              <span className="label">Start here</span>
+              <h2 className="serif mt-3 text-[32px] font-medium leading-[1.08] tracking-[-0.01em]">
+                Is this CVE in our system, and how does it get there?
+              </h2>
+              <p className="mt-4 text-[14px] leading-relaxed text-ink-2">
+                Blastradius follows the dependency and call graph in FalkorDB from an advisory to the services it reaches,
+                then out to the internet. It names the owners, remembers what you decided last time, and treats
+                &ldquo;no path&rdquo; as an answer.
+              </p>
+              <button className="btn btn-solid mt-5" onClick={() => playDemo()} disabled={!!demo}>Play the guided demo</button>
+
+              <section className="mt-8 border-t border-rule pt-4">
+                <Label>Try one</Label>
+                <ul>
+                  {samples.map((s) => (
+                    <li key={s.q} className="border-b border-rule">
+                      <button onClick={() => run(s.q)} className="flex w-full items-baseline gap-3 py-2.5 text-left text-[13.5px] hover:text-blue">
+                        <span>{s.label}</span>
+                        <span className="mono ml-auto truncate text-[10.5px] text-faint">{s.q}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+
+              <section className="mt-8 border-t border-rule pt-4">
+                <Label>How to read the graph</Label>
+                <dl className="grid grid-cols-[22px_1fr] gap-y-2.5 text-[13px] text-ink-2">
+                  <dt><i className="mt-1 inline-block h-[10px] w-[10px] border-[3px] border-double border-amber" /></dt>
+                  <dd>A double ring marks a service reachable from the internet.</dd>
+                  <dt><i className="mt-2 inline-block h-[2px] w-3.5 bg-red" /></dt>
+                  <dd>Red is the path an attacker would travel, drawn hop by hop.</dd>
+                  <dt><i className="mt-1 inline-block h-[10px] w-[10px] bg-red" /></dt>
+                  <dd>A filled red box is the vulnerable package itself.</dd>
+                </dl>
+              </section>
+            </div>
+          )}
+        </aside>
       </div>
-
-      {/* left panel */}
-      <aside className="glass relative z-10 mx-4 mt-3 flex min-h-[420px] flex-col rounded-2xl p-3.5 lg:absolute lg:bottom-4 lg:left-4 lg:top-[68px] lg:mx-0 lg:mt-0 lg:min-h-0 lg:w-[360px]">
-        <div className="mb-3 flex gap-1 rounded-xl border border-line bg-bg/60 p-0.5" role="tablist">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              role="tab"
-              aria-selected={tab === t.id}
-              onClick={() => setTab(t.id)}
-              className={clsx("flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-medium transition", tab === t.id ? "bg-surface-2 text-fg" : "text-muted hover:text-fg")}
-            >
-              <t.icon className="h-3.5 w-3.5" /> {t.label}
-            </button>
-          ))}
-        </div>
-        {tab === "risk" && <RiskBoard risk={risk} activeId={result?.advisory?.id} onPick={run} />}
-        {tab === "memory" && (
-          <MemoryView brain={brain} onReset={async () => { await api.reset(tenant); setResult(null); refreshBrain(tenant); }} />
-        )}
-        {tab === "company" && <CompanyView tenant={tenant} overview={overview} selected={selected} onSelect={setSelected} />}
-      </aside>
-
-      {/* right panel */}
-      <AnimatePresence>
-        {result && (
-          <motion.aside
-            key={result.run_id}
-            initial={{ opacity: 0, x: 24 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 24 }}
-            transition={{ type: "spring", stiffness: 260, damping: 28 }}
-            className="glass relative z-10 mx-4 mb-4 mt-3 flex flex-col rounded-2xl lg:absolute lg:bottom-4 lg:right-4 lg:top-[68px] lg:mx-0 lg:mb-0 lg:mt-0 lg:w-[420px]"
-          >
-            <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-              <Waypoints className="h-4 w-4 text-accent" />
-              <span className="text-sm font-semibold">Triage</span>
-              <span className="mono truncate text-xs text-muted">{result.advisory?.cve ?? result.ident}</span>
-              <button onClick={() => setResult(null)} aria-label="Close triage" className="ml-auto text-faint hover:text-fg"><X className="h-4 w-4" /></button>
-            </div>
-            <div className="scroll min-h-0 flex-1 overflow-y-auto p-4">
-              <ResultPanel r={result} tenant={tenant} onReplay={() => setReplayKey((k) => k + 1)} onDecided={() => { refreshBrain(tenant); refreshRisk(tenant); }} />
-            </div>
-          </motion.aside>
-        )}
-      </AnimatePresence>
     </main>
   );
 }

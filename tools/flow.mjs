@@ -40,7 +40,7 @@ await page.fill("input[aria-label^='Triage']", "who owns paymentservice?");
 await page.keyboard.press("Enter");
 await page.waitForTimeout(1500);
 await shot("6-ask");
-await page.getByRole("tab", { name: /OpenTelemetry/ }).click();
+await page.getByRole("button", { name: /OpenTelemetry/ }).click();
 await page.waitForTimeout(2500);
 await shot("7-otel");
 console.log(errs.join("\n") || "no errors");

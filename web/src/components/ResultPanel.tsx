@@ -1,31 +1,34 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { ArrowRight, BookMarked, Check, ExternalLink, GitPullRequest, Network, RotateCcw, ShieldCheck, Users } from "lucide-react";
 import { useState } from "react";
 import clsx from "clsx";
 import { api, TriageResult } from "@/lib/api";
-import { Cypher, Label, Pill, PriorityBadge, SevBadge, Spinner, VerdictBadge, timeAgo } from "./ui";
+import { Cypher, Label, Priority, Severity, VERDICT, timeAgo } from "./ui";
 
-const AGENT_TONE: Record<string, string> = {
-  Triage: "text-accent border-accent/40",
-  Investigator: "text-violet border-violet/40",
-  Judge: "text-warn border-warn/40",
-  Remediator: "text-good border-good/40",
-};
-
-function Chain({ items, accent }: { items: string[]; accent?: boolean }) {
+function Chain({ items, hot }: { items: string[]; hot?: boolean }) {
   return (
-    <div className="flex flex-wrap items-center gap-1">
+    <span className="mono text-[12px] leading-[1.7]">
       {items.map((s, i) => (
-        <span key={i} className="flex items-center gap-1">
-          <span className={clsx("mono rounded-md border px-1.5 py-0.5 text-[11px]", accent && i === items.length - 1 ? "border-bad/50 text-bad" : "border-line-strong text-fg")}>
-            {s}
-          </span>
-          {i < items.length - 1 && <ArrowRight className="h-3 w-3 text-faint" />}
+        <span key={i}>
+          <span className={clsx(hot && i === items.length - 1 && "font-semibold text-red")}>{s}</span>
+          {i < items.length - 1 && (
+            <>
+              <span className="px-1.5 text-faint">→</span>
+              <wbr />
+            </>
+          )}
         </span>
       ))}
-    </div>
+    </span>
+  );
+}
+
+function Section({ title, right, children }: { title: string; right?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="mt-7 border-t border-rule pt-4">
+      <Label right={right}>{title}</Label>
+      {children}
+    </section>
   );
 }
 
@@ -43,24 +46,17 @@ export default function ResultPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [done, setDone] = useState<{ id: string; what: string } | null>(null);
   const [why, setWhy] = useState("");
-  const prod = r.services.filter((s) => !s.dev_only);
+  const v = VERDICT[r.verdict] ?? { word: r.verdict, color: "text-ink" };
 
   async function decide(decision: "patched" | "not_affected" | "accepted_risk") {
     if (!r.advisory) return;
     setBusy(decision);
     try {
       const eco = r.services[0]?.paths[0]?.pkg_key.split(":")[0];
-      const rationale =
-        decision === "patched"
-          ? `Approved fix: ${r.actions[0]?.title ?? "upgrade vulnerable package"}`
-          : why.trim();
+      const rationale = decision === "patched" ? `Approved fix: ${r.actions[0]?.title ?? "upgrade vulnerable package"}` : why.trim();
       const out = await api.decide(tenant, {
-        advisory_id: r.advisory.id,
-        decision,
-        rationale,
-        actor: "you",
-        services: r.services.map((s) => s.service),
-        eco,
+        advisory_id: r.advisory.id, decision, rationale, actor: "you",
+        services: r.services.map((s) => s.service), eco,
       });
       setDone({ id: out.case_id, what: decision.replace("_", " ") });
       onDecided();
@@ -69,203 +65,165 @@ export default function ResultPanel({
     }
   }
 
-  const stepTotal = r.steps.reduce((a, s) => a + s.ms, 0);
+  const graphMs = r.steps.reduce((a, s) => a + s.ms, 0);
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* verdict */}
-      <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-        <div className="flex items-center gap-2">
-          <VerdictBadge v={r.verdict} />
-          <PriorityBadge p={r.priority} />
-          {r.advisory && <SevBadge s={r.advisory.severity} />}
-          <button onClick={onReplay} className="ml-auto flex items-center gap-1 text-[11px] text-muted hover:text-fg" title="Replay the traversal">
-            <RotateCcw className="h-3 w-3" /> replay
-          </button>
-        </div>
-        <p className="mt-2.5 text-[15px] font-medium leading-snug text-fg">{r.headline}</p>
-        {r.advisory && (
-          <div className="mt-2 text-xs text-muted">
-            <span className="mono text-fg">{r.advisory.cve ?? r.advisory.id}</span> · {r.advisory.summary}{" "}
-            <a href={r.advisory.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-accent hover:underline">
-              source <ExternalLink className="h-3 w-3" />
-            </a>
-          </div>
-        )}
-        {r.verdict === "NOT_AFFECTED" && r.reason === "no_path" && (
-          <div className="mt-3 flex items-start gap-2 rounded-lg border border-good/30 bg-good/5 p-2.5 text-xs text-good">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>
-              Proof by absence: the graph query returned <b>zero paths</b>. No service depends, directly or transitively, on a
-              package this advisory affects.
-            </span>
-          </div>
-        )}
-      </motion.section>
+    <article className="fade-in">
+      <div className="flex items-baseline justify-between">
+        <span className="label">Case file · {r.run_id.slice(4)}</span>
+        <button onClick={onReplay} className="mono text-[11px] text-faint underline underline-offset-2 hover:text-ink">
+          replay traversal
+        </button>
+      </div>
 
-      {/* timeline */}
-      <section>
-        <Label right={<span className="mono text-[11px] text-accent">{stepTotal.toFixed(0)}ms in graph · {r.total_ms}ms total</span>}>
-          Agent handoffs
-        </Label>
-        <ol className="relative ml-1.5 border-l border-line-strong pl-4">
-          {r.steps.map((s, i) => (
-            <motion.li
-              key={i}
-              initial={{ opacity: 0, x: -6 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 + i * 0.28 }}
-              className="relative pb-3 last:pb-0"
-            >
-              <span className={clsx("absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full border-2 bg-bg", AGENT_TONE[s.agent] ?? "border-line-strong")} />
-              <div className="flex items-center gap-2 text-[11px]">
-                <span className={clsx("font-semibold", (AGENT_TONE[s.agent] ?? "").split(" ")[0])}>{s.agent}</span>
-                <span className="mono text-faint">{s.tool}</span>
-                {s.ms > 0 && <span className="mono ml-auto text-faint">{s.ms}ms</span>}
-              </div>
-              <div className="mt-0.5 text-xs leading-snug text-[#c3cce0]">{s.summary}</div>
-              {s.traces.length > 0 && (
-                <div className="mt-1.5 flex flex-col gap-1">
-                  {s.traces.slice(0, 3).map((t, k) => (
-                    <Cypher key={k} trace={t} />
-                  ))}
-                </div>
-              )}
-            </motion.li>
-          ))}
-        </ol>
-      </section>
+      <h2 className={clsx("serif mt-3 text-[40px] font-medium leading-none tracking-[-0.01em]", v.color)}>{v.word}</h2>
+      <div className="mt-3 flex items-center gap-3">
+        <Priority p={r.priority} />
+        {r.advisory && <Severity s={r.advisory.severity} />}
+        {r.advisory && <span className="mono text-[11.5px] text-ink-2">{r.advisory.cve ?? r.advisory.id}</span>}
+      </div>
+      <p className="serif mt-4 text-[18px] leading-[1.35]">{r.headline}</p>
+      {r.advisory && (
+        <p className="mt-2 text-[13px] text-ink-2">
+          {r.advisory.summary}{" "}
+          <a href={r.advisory.url} target="_blank" rel="noreferrer" className="link">
+            advisory
+          </a>
+        </p>
+      )}
+      {r.verdict === "NOT_AFFECTED" && r.reason === "no_path" && (
+        <p className="serif mt-4 border-l-2 border-green pl-3 text-[15px] italic text-ink-2">
+          Proof by absence. The traversal returned zero paths: no service depends, directly or transitively, on a package
+          this advisory affects.
+        </p>
+      )}
 
-      {/* services */}
       {r.services.length > 0 && (
-        <section>
-          <Label>Blast radius · {r.services.length} service{r.services.length > 1 ? "s" : ""}</Label>
-          <div className="flex flex-col gap-2.5">
+        <Section title={`Blast radius · ${r.services.length} service${r.services.length > 1 ? "s" : ""}`}>
+          <div className="flex flex-col">
             {r.services.map((s) => {
               const best = [...s.paths].sort((a, b) => a.hops - b.hops)[0];
               return (
-                <div key={s.service} className="rounded-xl border border-line bg-surface-2/60 p-3">
-                  <div className="flex items-center gap-2">
-                    <Network className="h-3.5 w-3.5 text-muted" />
-                    <span className="text-sm font-semibold">{s.service}</span>
-                    {s.exposed && <Pill tone="warn">internet-exposed</Pill>}
-                    {s.dev_only && <Pill>dev-only</Pill>}
+                <div key={s.service} className="border-b border-rule py-3 first:pt-0 last:border-b-0">
+                  <div className="flex items-baseline gap-3">
+                    <h4 className="serif text-[20px] leading-none">{s.service}</h4>
+                    {s.exposed && <span className="label !text-amber">▲ internet-exposed</span>}
+                    {s.dev_only && <span className="label">dev only</span>}
                   </div>
-                  {s.exposure_path && (
-                    <div className="mt-2">
-                      <div className="mb-1 text-[10px] uppercase tracking-wider text-faint">Attack path in</div>
-                      <Chain items={s.exposure_path} />
-                    </div>
-                  )}
-                  <div className="mt-2">
-                    <div className="mb-1 text-[10px] uppercase tracking-wider text-faint">Dependency chain</div>
-                    <Chain items={[s.service, ...best.path.slice(1).map((p) => p.split(":")[1])]} accent />
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
-                    <span>
-                      fix: <span className="mono text-good">{best.pkg} ≥ {best.fixed ?? "?"}</span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Users className="h-3 w-3" />
-                      {s.owners.length ? s.owners.map((o) => o.owner.split("/").pop()).join(", ") : "no owner"}
-                    </span>
-                    <span>{s.callers.length} upstream caller{s.callers.length === 1 ? "" : "s"}</span>
-                  </div>
+                  <dl className="mt-2.5 grid grid-cols-[96px_minmax(0,1fr)] gap-y-1.5 text-[12.5px] [&>dd]:break-words">
+                    {s.exposure_path && (
+                      <>
+                        <dt className="label pt-0.5">Reached via</dt>
+                        <dd><Chain items={s.exposure_path} /></dd>
+                      </>
+                    )}
+                    <dt className="label pt-0.5">Dependency</dt>
+                    <dd><Chain items={[s.service, ...best.path.slice(1).map((p) => p.split(":")[1])]} hot /></dd>
+                    <dt className="label pt-0.5">Fix</dt>
+                    <dd className="mono text-[12px] text-green">{best.pkg} ≥ {best.fixed ?? "?"}</dd>
+                    <dt className="label pt-0.5">Owners</dt>
+                    <dd>{s.owners.length ? s.owners.map((o) => o.owner.split("/").pop()).join(", ") : <span className="text-faint">none on record</span>}</dd>
+                    <dt className="label pt-0.5">Callers</dt>
+                    <dd>{s.callers.length} upstream</dd>
+                  </dl>
                 </div>
               );
             })}
           </div>
-        </section>
+        </Section>
       )}
 
-      {/* precedents */}
       {r.precedents.length > 0 && (
-        <section>
-          <Label>Memory · precedent</Label>
-          <div className="flex flex-col gap-2">
+        <Section title="Memory · precedent">
+          <div className="flex flex-col gap-3">
             {r.precedents.map((p) => (
-              <motion.div
-                key={p.id}
-                initial={{ opacity: 0, scale: 0.97 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="rounded-xl border border-violet/40 bg-violet/5 p-3"
-              >
-                <div className="flex items-center gap-2 text-xs">
-                  <BookMarked className="h-3.5 w-3.5 text-violet" />
-                  <span className="mono text-violet">{p.id}</span>
-                  <Pill tone={p.decision === "patched" ? "good" : "warn"}>{p.decision.replace("_", " ")}</Pill>
-                  {p.exact && <Pill tone="violet">same advisory</Pill>}
+              <div key={p.id} className="border-l-2 border-blue pl-3">
+                <div className="flex items-baseline gap-2 text-[12px]">
+                  <span className="mono text-blue">{p.id}</span>
+                  <span className="font-medium capitalize">{p.decision.replace("_", " ")}</span>
+                  {p.exact && <span className="label">same advisory</span>}
                   <span className="ml-auto text-faint">{timeAgo(p.ts)}</span>
                 </div>
-                <p className="mt-1.5 text-xs text-[#c3cce0]">{p.rationale}</p>
-                <div className="mt-1 text-[11px] text-muted">
+                <p className="mt-1 text-[13px]">{p.rationale}</p>
+                <p className="mt-0.5 text-[12px] text-ink-2">
                   {p.cve ?? p.advisory} · {p.packages.slice(0, 3).join(", ")} · by {p.actor}
-                  {p.playbooks[0] && <> · playbook <span className="mono text-violet">{p.playbooks[0]}</span></>}
-                </div>
-              </motion.div>
+                  {p.playbooks[0] && <> · playbook <span className="mono">{p.playbooks[0]}</span></>}
+                </p>
+              </div>
             ))}
           </div>
-        </section>
+        </Section>
       )}
 
-      {/* gated actions */}
       {r.actions.length > 0 && (
-        <section>
-          <Label right={<Pill tone="warn">human approval required</Pill>}>Proposed actions</Label>
-          <div className="flex flex-col gap-2">
+        <Section title="Proposed actions" right={<span className="label !text-amber">needs your approval</span>}>
+          <ul className="flex flex-col">
             {r.actions.map((a) => (
-              <details key={a.id} className="group rounded-xl border border-line bg-surface-2/60 p-3 open:border-line-strong">
-                <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-medium">
-                  <GitPullRequest className="h-3.5 w-3.5 text-good" />
-                  <span className="truncate">{a.title}</span>
-                </summary>
-                <pre className="mono mt-2 whitespace-pre-wrap text-[11px] leading-5 text-muted">{a.body}</pre>
-              </details>
+              <li key={a.id} className="border-b border-rule">
+                <details>
+                  <summary className="flex cursor-pointer items-baseline gap-2 py-2 text-[13px] hover:text-blue">
+                    <span className="mono text-faint">↳</span>
+                    <span>{a.title}</span>
+                  </summary>
+                  <pre className="mono mb-2 whitespace-pre-wrap bg-sunk px-3 py-2 text-[11.5px] leading-[1.6] text-ink-2">{a.body}</pre>
+                </details>
+              </li>
             ))}
-          </div>
+          </ul>
           {done ? (
-            <div className="mt-3 flex items-center gap-2 rounded-lg border border-good/40 bg-good/10 p-2.5 text-xs text-good">
-              <Check className="h-4 w-4" />
-              <span>
-                Recorded as <b>{done.what}</b> in memory (<span className="mono">{done.id}</span>). The next related advisory will cite it.
-              </span>
-            </div>
+            <p className="mt-4 text-[13px] text-green">
+              Recorded as <b>{done.what}</b> in memory, <span className="mono">{done.id}</span>. The next related advisory will cite it.
+            </p>
           ) : (
-            <div className="mt-3 flex flex-col gap-2">
+            <div className="mt-4">
               <input
                 value={why}
                 onChange={(e) => setWhy(e.target.value)}
-                placeholder="Rationale (required for VEX / accept risk)…"
-                className="w-full rounded-lg border border-line-strong bg-bg px-3 py-2 text-xs outline-none placeholder:text-faint focus:border-accent"
+                placeholder="Rationale (needed for VEX or accepting risk)"
+                aria-label="Rationale"
+                className="w-full border-0 border-b border-rule-strong bg-transparent px-0 py-1.5 text-[13px] outline-none placeholder:text-faint focus:border-ink"
               />
-              <div className="flex flex-wrap gap-2">
-                <button
-                  disabled={!!busy || r.verdict === "NOT_AFFECTED"}
-                  onClick={() => decide("patched")}
-                  className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-bg transition hover:brightness-110 disabled:opacity-40"
-                >
-                  {busy === "patched" ? <Spinner /> : <Check className="h-3.5 w-3.5" />} Approve fix
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button className="btn btn-solid" disabled={!!busy || r.verdict === "NOT_AFFECTED"} onClick={() => decide("patched")}>
+                  {busy === "patched" ? "Recording…" : "Approve fix"}
                 </button>
-                <button
-                  disabled={!!busy || !why.trim()}
-                  onClick={() => decide("not_affected")}
-                  className="rounded-lg border border-line-strong px-3 py-1.5 text-xs font-medium text-fg transition hover:border-good hover:text-good disabled:opacity-40"
-                >
+                <button className="btn" disabled={!!busy || !why.trim()} onClick={() => decide("not_affected")}>
                   VEX: not affected
                 </button>
-                <button
-                  disabled={!!busy || !why.trim()}
-                  onClick={() => decide("accepted_risk")}
-                  className="rounded-lg border border-line-strong px-3 py-1.5 text-xs font-medium text-fg transition hover:border-warn hover:text-warn disabled:opacity-40"
-                >
+                <button className="btn btn-quiet" disabled={!!busy || !why.trim()} onClick={() => decide("accepted_risk")}>
                   Accept risk
                 </button>
               </div>
-              {prod.length > 0 && <p className="text-[11px] text-faint">Nothing is executed; approval writes the decision into the graph as memory.</p>}
+              <p className="mt-2 text-[11.5px] text-faint">Nothing is executed. Approving writes the decision into the graph as memory.</p>
             </div>
           )}
-        </section>
+        </Section>
       )}
-    </div>
+
+      <Section
+        title="Agent handoffs"
+        right={<span className="mono num text-[11px] text-faint">{graphMs.toFixed(0)} ms in graph · {r.total_ms} ms total</span>}
+      >
+        <ol>
+          {r.steps.map((s, i) => (
+            <li
+              key={i}
+              className="fade-in grid grid-cols-[88px_1fr_auto] gap-x-3 border-b border-rule py-2 first:pt-0"
+              style={{ animationDelay: `${i * 120}ms` }}
+            >
+              <div className="label !text-ink-2 pt-0.5">{s.agent}</div>
+              <div className="min-w-0">
+                <div className="text-[13px] leading-snug">{s.summary}</div>
+                <div className="mono text-[10.5px] text-faint">{s.tool}</div>
+                {s.traces.slice(0, 3).map((t, k) => (
+                  <Cypher key={k} trace={t} />
+                ))}
+              </div>
+              <div className="mono num pt-0.5 text-[11px] text-faint">{s.ms > 0 ? `${s.ms} ms` : ""}</div>
+            </li>
+          ))}
+        </ol>
+      </Section>
+    </article>
   );
 }

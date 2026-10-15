@@ -11,6 +11,10 @@ Built for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB), enter
 | 2 · Agent Memory & Coordination | Episodic cases, procedural playbooks with success counts, three agents (Triage → Investigator → Remediator) handing off through graph state, and **one graph per tenant** for hard isolation. |
 | 3 · Company Brain | Ownership from CODEOWNERS, expertise from commit history, dependency decisions **traced to the source commit**, `SUPERSEDES` edges marking stale knowledge. |
 
+![Blastradius triage of a critical protobufjs advisory: red attack path from the exposed frontend down to the vulnerable package, with the case file on the right](docs/img/triage.png)
+
+<sub>A critical advisory traced hop by hop from the internet-exposed frontend to the vulnerable package. The right column is the case file: verdict, blast radius, owners, precedent, gated actions and every Cypher query. Light and dark themes follow your OS.</sub>
+
 ## Why a graph (and not a vector DB)
 The question *"does this CVE reach production?"* is a path query: advisory → package → dependency chain → service → caller chain → internet-exposed entry point. A similarity search can't prove a path exists, and it certainly can't prove one doesn't. With a graph, **"no path found" is evidence**, which is how Blastradius proves Log4Shell does not affect a Node/Go/Python stack.
 

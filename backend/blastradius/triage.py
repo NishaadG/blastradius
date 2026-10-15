@@ -177,8 +177,8 @@ def run_triage(tenant: str, ident: str) -> dict:
             exposed = any(s["exposed"] for s in prod)
             verdict, reason = "AFFECTED", "reachable_runtime_dependency"
             names = ", ".join(s["service"] for s in prod)
-            headline = (f"Affected: {names}. "
-                        + ("Reachable from an internet-exposed entry point." if exposed else "Not internet-exposed."))
+            headline = (f"Reaches {names} through a runtime dependency. "
+                        + ("Reachable from an internet-exposed entry point." if exposed else "Not reachable from the internet."))
         else:
             verdict, reason = "NEEDS_HUMAN", "dev_only_dependency"
             headline = "Only dev-time dependency paths exist; confirm it is not shipped to production."
