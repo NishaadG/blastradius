@@ -2,13 +2,40 @@
 
 import clsx from "clsx";
 import { useEffect, useState } from "react";
-import { api, Brain, GraphData, Risk, ServiceCard } from "@/lib/api";
+import { api, Brain, GraphData, RescanResult, Risk, ServiceCard } from "@/lib/api";
 import Bench from "./Bench";
 import { Cypher, Empty, Label, Loading, Priority, Severity, timeAgo } from "./ui";
 
 /* ------------------------------------------------------------------ risk board */
-export function RiskBoard({ risk, activeId, onPick }: { risk: Risk | null; activeId?: string; onPick: (id: string) => void }) {
+export function RiskBoard({
+  risk,
+  activeId,
+  onPick,
+  onRescan,
+}: {
+  risk: Risk | null;
+  activeId?: string;
+  onPick: (id: string) => void;
+  onRescan?: () => Promise<RescanResult>;
+}) {
+  const [scan, setScan] = useState<{ busy: boolean; msg: string | null }>({ busy: false, msg: null });
   if (!risk) return <Loading what="Ranking advisories" />;
+
+  async function rescan() {
+    if (!onRescan) return;
+    setScan({ busy: true, msg: null });
+    try {
+      const r = await onRescan();
+      setScan({
+        busy: false,
+        msg: r.new.length
+          ? `${r.new.length} new advisor${r.new.length === 1 ? "y" : "ies"} since the last scan: ${r.new.filter((n) => n.priority === "P0" || n.priority === "P1").length} need attention.`
+          : `No new advisories. Checked ${r.packages.toLocaleString()} packages against OSV just now.`,
+      });
+    } catch (e) {
+      setScan({ busy: false, msg: e instanceof Error ? e.message : String(e) });
+    }
+  }
   const cells: [string, string][] = [
     ["P0", "critical and reachable"],
     ["P1", "critical, or high and reachable"],
@@ -27,7 +54,19 @@ export function RiskBoard({ risk, activeId, onPick }: { risk: Risk | null; activ
           </div>
         ))}
       </div>
-      <Label className="mt-4">Ranked by severity, then exposure</Label>
+      <Label
+        className="mt-4"
+        right={
+          onRescan && (
+            <button onClick={rescan} disabled={scan.busy} className="mono text-[11px] text-faint underline underline-offset-2 hover:text-ink disabled:opacity-50">
+              {scan.busy ? "scanning OSV…" : "rescan OSV"}
+            </button>
+          )
+        }
+      >
+        Ranked by severity, then exposure
+      </Label>
+      {scan.msg && <p className="fade-in mb-2 border-l-2 border-rule-strong pl-3 text-[12px] leading-snug text-ink-2">{scan.msg}</p>}
       <ul className="scroll -mr-3 flex min-h-0 flex-1 flex-col overflow-y-auto pr-3">
         {risk.advisories.map((a) => (
           <li key={a.id} className="border-b border-rule">
@@ -41,7 +80,10 @@ export function RiskBoard({ risk, activeId, onPick }: { risk: Risk | null; activ
               <div className="pt-0.5"><Priority p={a.priority} /></div>
               <div className="min-w-0">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="mono truncate text-[11.5px] text-ink-2">{a.cve ?? a.id}</span>
+                  <span className="mono truncate text-[11.5px] text-ink-2">
+                    {a.cve ?? a.id}
+                    {a.new && <span className="label ml-2 !text-amber">new</span>}
+                  </span>
                   <Severity s={a.severity} />
                 </div>
                 <div className="mt-0.5 line-clamp-2 text-[13px] leading-snug">{a.summary}</div>
@@ -119,6 +161,29 @@ export function MemoryView({ tenant, brain, onReset }: { tenant: string; brain: 
             );
           })}
         </ul>
+      </section>
+
+      <section className="mt-6 border-t border-rule pt-4">
+        <Label>Export · OpenVEX</Label>
+        <p className="mb-3 text-[12px] leading-snug text-ink-2">
+          Your approved decisions as a standard OpenVEX document: fixed, not affected (with your rationale) or risk accepted.
+        </p>
+        <button
+          className="btn"
+          disabled={brain.cases.length === 0}
+          onClick={async () => {
+            const doc = await api.vex(tenant);
+            const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" }));
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${tenant}.openvex.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+        >
+          Download VEX
+        </button>
+        {brain.cases.length === 0 && <span className="ml-3 text-[11.5px] text-faint">approve a decision first</span>}
       </section>
 
       <Bench tenant={tenant} />

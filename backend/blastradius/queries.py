@@ -145,14 +145,14 @@ MATCH (s:Service)
 WITH a, e, p, s, shortestPath((s)-[:DEPENDS_ON*1..15]->(p)) AS path
 WHERE path IS NOT NULL
 RETURN a.id, a.cve, a.severity, a.summary, s.name, coalesce(s.exposed,false), p.name, p.version,
-       coalesce(p.dev,false), e.fixed, length(path)
+       coalesce(p.dev,false), e.fixed, length(path), a.first_seen
 """
 
 
 def all_findings(tenant):
     rows, tr = _run(tenant, Q_FINDINGS)
     return [{"id": r[0], "cve": r[1], "severity": r[2], "summary": r[3], "service": r[4], "exposed": r[5],
-             "pkg": r[6], "version": r[7], "dev": r[8], "fixed": r[9], "hops": r[10]} for r in rows], tr
+             "pkg": r[6], "version": r[7], "dev": r[8], "fixed": r[9], "hops": r[10], "first_seen": r[11]} for r in rows], tr
 
 
 # ---------------------------------------------------------------- package presence (for 'version outside range')

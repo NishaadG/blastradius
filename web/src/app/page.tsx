@@ -340,7 +340,18 @@ export default function Home() {
               No deployment topology for this repository, so exposure is unknown and every service is assumed reachable from the internet.
             </p>
           )}
-          {tab === "risk" && <RiskBoard risk={risk} activeId={result?.advisory?.id} onPick={run} />}
+          {tab === "risk" && (
+            <RiskBoard
+              risk={risk}
+              activeId={result?.advisory?.id}
+              onPick={run}
+              onRescan={async () => {
+                const r = await api.rescan(tenant);
+                await refreshRisk(tenant);
+                return r;
+              }}
+            />
+          )}
           {tab === "memory" && (
             <MemoryView tenant={tenant} brain={brain} onReset={async () => { await api.reset(tenant); setResult(null); refreshBrain(tenant); }} />
           )}

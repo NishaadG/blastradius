@@ -5,6 +5,8 @@ A new CVE drops. Blastradius answers: *are we affected, through which dependency
 
 Built for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB), entering **all three tracks**.
 
+**Live demo: https://13-203-50-195.sslip.io** (small shared server; see [Hosted demo vs running it yourself](#hosted-demo-vs-running-it-yourself)). MCP endpoint: `https://13-203-50-195.sslip.io/mcp` (read-only).
+
 ![Blastradius triage of a critical protobufjs advisory: red attack path from the exposed frontend down to the vulnerable package, with the case file on the right](docs/img/triage.png)
 
 <sub>A critical advisory traced hop by hop from the internet-exposed frontend to the vulnerable package. The right column is the case file: verdict, blast radius, owners, precedent, gated actions and every Cypher query. Light and dark themes follow your OS.</sub>
@@ -28,6 +30,8 @@ Built for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB), enter
   ```
   Tools: `list_tenants`, `risk_board`, `triage_advisory`, `blast_radius`, `who_owns`, `service_brain`, and `record_decision` (local only; it is not registered on a public server).
 - **Chat.** A tool-calling loop on a free Gemini key (`GEMINI_API_KEY`); with no key a deterministic router answers the same tools, so everything works at $0.
+- **Let it notice on its own.** **Rescan OSV** (or `python -m blastradius.watch --all` from cron) re-queries every package, finds advisories published since the graph was built, writes them into the graph marked *new*, and triages them with the same judge.
+- **Take the decision with you.** Approved decisions export as an **[OpenVEX](https://openvex.dev)** document (fixed / not affected with your rationale / risk accepted) from the Memory tab.
 - **Stress it.** The Memory tab runs 10/50/100 concurrent agents against shared graph memory.
 
 ## Run it locally ($0, no accounts, works offline)

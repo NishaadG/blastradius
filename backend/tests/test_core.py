@@ -105,6 +105,25 @@ def test_vex_precedent_flips_verdict_to_not_affected():
     assert r2["verdict"] == "NOT_AFFECTED" and r2["reason"] == "vex_precedent"
 
 
+def test_decisions_export_as_openvex():
+    from blastradius import vex
+
+    sid = "vex-session"
+    memory.reset_session(T, sid)
+    memory.record_decision(T, "GHSA-xxxx-xxxx-xxxx", "patched", "bumped libB", "alice", ["api"], eco="npm", sid=sid)
+    memory.record_decision(T, "GHSA-yyyy-yyyy-yyyy", "not_affected", "dev tool only", "bob", ["payments"], sid=sid)
+    memory.record_decision(T, "GHSA-yyyy-yyyy-yyyy", "accepted_risk", "no fix yet", "bob", [], sid=sid)
+    doc = vex.build_vex(T, sid)
+    assert doc["@context"].startswith("https://openvex.dev/ns") and doc["version"] == 1
+    by_status = {s["status"]: s for s in doc["statements"]}
+    assert set(by_status) == {"fixed", "not_affected", "affected"}
+    assert by_status["not_affected"]["justification"] and by_status["not_affected"]["impact_statement"] == "dev tool only"
+    assert by_status["affected"]["action_statement"].startswith("Risk accepted")
+    assert by_status["fixed"]["vulnerability"]["name"] == "CVE-2000-0001"
+    assert vex.build_vex(T, "someone-else")["statements"] == []           # another session exports nothing of ours
+    memory.reset_session(T, sid)
+
+
 def test_read_path_blocks_writes():
     for bad in ("MATCH (n) DETACH DELETE n", "CREATE (:X)", "MATCH (n) SET n.a=1"):
         with pytest.raises(UnsafeQuery):

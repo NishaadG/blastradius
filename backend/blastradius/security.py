@@ -68,7 +68,7 @@ RULES = {
 
 
 def classify(method: str, path: str) -> str:
-    if method == "POST" and path.endswith("/ingest"):
+    if method == "POST" and (path.endswith("/ingest") or path.endswith("/rescan")):
         return "ingest"
     if path.endswith("/bench"):
         return "bench"

@@ -113,6 +113,31 @@ def discover_repo(repo: str):
     return services, r.json().get("truncated", False)
 
 
+def write_advisories(tenant: str, all_pkgs: dict, hits: dict, vulns: dict, first_seen: int | None = None):
+    """Idempotently write advisories, their aliases and AFFECTS edges. `first_seen` marks advisories a later rescan found."""
+    adv_rows, aff_rows, alias_rows = [], [], []
+    for vid, v in vulns.items():
+        s = osv.summarize(v)
+        s["first_seen"] = first_seen
+        adv_rows.append(s)
+        alias_rows += [{"id": s["id"], "alias": al} for al in s["aliases"]]
+    for key, ids in hits.items():
+        p = all_pkgs[key]
+        for vid in ids:
+            if vid in vulns:
+                aff_rows.append({"id": vid, "key": key, "fixed": osv.fixed_version(vulns[vid], p["eco"], p["name"])})
+    for c in chunks(adv_rows):
+        db.write(tenant, """UNWIND $rows AS r MERGE (a:Advisory {id:r.id})
+            SET a.cve=r.cve, a.summary=r.summary, a.severity=r.severity, a.published=r.published, a.url=r.url,
+                a.first_seen = coalesce(a.first_seen, r.first_seen)""", {"rows": c})
+    for c in chunks(alias_rows):
+        db.write(tenant, "UNWIND $rows AS r MATCH (a:Advisory {id:r.id}) MERGE (x:Alias {name:r.alias}) MERGE (x)-[:ALIAS_OF]->(a)",
+                 {"rows": c})
+    for c in chunks(aff_rows):
+        db.write(tenant, """UNWIND $rows AS r MATCH (a:Advisory {id:r.id}),(p:Package {key:r.key})
+            MERGE (a)-[e:AFFECTS]->(p) SET e.fixed=r.fixed""", {"rows": c})
+
+
 def build_graph(tenant: str, meta: dict, services: list[dict], calls: set, exposed: set, exposure_known: bool,
                 ref: str, say: Progress = print):
     repo = meta["repo"]
@@ -183,25 +208,7 @@ def build_graph(tenant: str, meta: dict, services: list[dict], calls: set, expos
         db.write(tenant, """UNWIND $rows AS r MATCH (s:Service {name:r.s}),(b:Package {key:r.b})
             MERGE (s)-[e:DEPENDS_ON]->(b) SET e.direct=true, e.dev=r.dev, e.indirect=r.indirect""", {"rows": c})
 
-    adv_rows, aff_rows, alias_rows = [], [], []
-    for vid, v in vulns.items():
-        s = osv.summarize(v)
-        adv_rows.append(s)
-        alias_rows += [{"id": s["id"], "alias": al} for al in s["aliases"]]
-    for key, ids in hits.items():
-        p = all_pkgs[key]
-        for vid in ids:
-            if vid in vulns:
-                aff_rows.append({"id": vid, "key": key, "fixed": osv.fixed_version(vulns[vid], p["eco"], p["name"])})
-    for c in chunks(adv_rows):
-        db.write(tenant, """UNWIND $rows AS r MERGE (a:Advisory {id:r.id})
-            SET a.cve=r.cve, a.summary=r.summary, a.severity=r.severity, a.published=r.published, a.url=r.url""", {"rows": c})
-    for c in chunks(alias_rows):
-        db.write(tenant, "UNWIND $rows AS r MATCH (a:Advisory {id:r.id}) MERGE (x:Alias {name:r.alias}) MERGE (x)-[:ALIAS_OF]->(a)",
-                 {"rows": c})
-    for c in chunks(aff_rows):
-        db.write(tenant, """UNWIND $rows AS r MATCH (a:Advisory {id:r.id}),(p:Package {key:r.key})
-            MERGE (a)-[e:AFFECTS]->(p) SET e.fixed=r.fixed""", {"rows": c})
+    write_advisories(tenant, all_pkgs, hits, vulns)
 
     for path in (meta.get("codeowners"), ".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"):
         co = fetch(repo, ref, path) if path else None

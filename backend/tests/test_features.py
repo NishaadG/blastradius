@@ -192,6 +192,27 @@ def test_transitive_expansion_finds_vulnerability_a_manifest_parser_cannot_see(m
     assert chain[1].startswith("org.springframework.boot:spring-boot-starter-log4j2") and chain[-1].startswith("org.apache.logging.log4j:log4j-core@2.14.1")
 
 
+def test_rescan_finds_only_new_advisories_and_triages_them(monkeypatch, fake_repo):
+    from blastradius import watch
+
+    tenant = ingest.ingest_repo("acme/shop-test", lambda m: None)
+    before = {r[0] for r in db.read(tenant, "MATCH (a:Advisory) RETURN a.id").result_set}
+    assert before == {"GHSA-jfh8-c2jp-5v3q"}
+    newer = {"id": "GHSA-new0-new0-new0", "aliases": ["CVE-2030-0001"], "summary": "Brand new bug in log4j-core",
+             "database_specific": {"severity": "HIGH"}, "published": "2030-01-01T00:00:00Z",
+             "affected": [{"package": {"ecosystem": "Maven", "name": "org.apache.logging.log4j:log4j-core"},
+                           "ranges": [{"events": [{"introduced": "0"}, {"fixed": "2.99"}]}]}]}
+    monkeypatch.setattr(osv, "query_packages",
+                        lambda pkgs, fresh=False: {k: ["GHSA-jfh8-c2jp-5v3q", "GHSA-new0-new0-new0"] if "log4j-core" in k else [] for k in pkgs})
+    monkeypatch.setattr(osv, "fetch_vulns", lambda ids: {i: newer for i in ids if i == "GHSA-new0-new0-new0"})
+    out = watch.rescan(tenant, say=lambda m: None)
+    assert [n["id"] for n in out["new"]] == ["GHSA-new0-new0-new0"] and out["new"][0]["priority"] == "P1"
+    board = triage.risk_board(tenant)["advisories"]
+    flags = {a["id"]: a["new"] for a in board}
+    assert flags == {"GHSA-jfh8-c2jp-5v3q": False, "GHSA-new0-new0-new0": True}   # only the later find is marked new
+    assert watch.rescan(tenant, say=lambda m: None)["new"] == []                  # a second scan finds nothing new
+
+
 def test_analyse_repo_rejects_bad_input_and_private_repos(fake_repo):
     with pytest.raises(ingest.IngestError):
         ingest.discover_repo("not a repo")

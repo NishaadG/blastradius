@@ -199,6 +199,24 @@ def ask(body: AskIn, request: Request, tenant: str = Depends(tenant_dep)):
     return agent.ask(tenant, body.question, sid=session_id(request))
 
 
+@app.get("/api/{tenant}/vex")
+def export_vex(request: Request, tenant: str = Depends(tenant_dep)):
+    """This session's decisions as an OpenVEX document."""
+    from . import vex
+    return JSONResponse(vex.build_vex(tenant, session_id(request)),
+                        headers={"Content-Disposition": f'attachment; filename="{tenant}.openvex.json"'})
+
+
+@app.post("/api/{tenant}/rescan")
+def rescan(tenant: str = Depends(tenant_dep)):
+    """Re-query OSV for this tenant's packages; new advisories are written to the graph and triaged."""
+    from . import watch
+    try:
+        return watch.rescan(tenant, say=lambda m: None)
+    except watch.Busy as e:
+        raise HTTPException(409, str(e))
+
+
 @app.get("/api/{tenant}/bench")
 def run_bench(agents: int = 50, seconds: float = 4.0, tenant: str = Depends(tenant_dep)):
     try:

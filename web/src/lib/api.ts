@@ -129,9 +129,17 @@ export type RiskItem = {
   packages: string[];
   fixed: string[];
   exposed: boolean;
+  new?: boolean;
   priority: "P0" | "P1" | "P2" | "DEV";
 };
 export type Risk = { advisories: RiskItem[]; summary: Record<string, number> };
+export type RescanResult = {
+  tenant: string;
+  packages: number;
+  applicable: number;
+  scanned_at: number;
+  new: { id: string; cve: string | null; severity: string; priority: string; services: string[]; summary: string }[];
+};
 export type Brain = {
   cases: { id: string; decision: string; ts: number; reused: number; actor: string }[];
   runs: number;
@@ -180,6 +188,8 @@ export type EvalInfo = { available: boolean; passed?: number; total?: number };
 
 export const api = {
   config: () => j<AppConfig>("/api/config"),
+  rescan: (t: string) => post<RescanResult>(`/api/${t}/rescan`, {}),
+  vex: (t: string) => j<{ statements: unknown[] }>(`/api/${t}/vex`),
   bench: (t: string, agents: number) => j<BenchResult>(`/api/${t}/bench?agents=${agents}&seconds=4`),
   startIngest: (repo: string) => post<{ job: string }>("/api/ingest", { repo }),
   ingestJob: (id: string) => j<IngestJob>(`/api/ingest/${id}`),

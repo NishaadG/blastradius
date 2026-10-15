@@ -109,7 +109,8 @@ def risk_board(tenant: str) -> dict:
                 exp_cache[f["service"]] = True  # unknown topology: assume the worst
 
         a = adv.setdefault(f["id"], {"id": f["id"], "cve": f["cve"], "severity": f["severity"], "summary": f["summary"],
-                                     "services": {}, "packages": set(), "exposed": False, "prod": False, "fixed": set()})
+                                     "services": {}, "packages": set(), "exposed": False, "prod": False, "fixed": set(),
+                                     "new": f["first_seen"] is not None})
         a["services"][f["service"]] = a["services"].get(f["service"], False) or not f["dev"]
         a["packages"].add(f"{f['pkg']}@{f['version']}")
         if f["fixed"]:

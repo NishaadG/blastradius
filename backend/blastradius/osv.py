@@ -46,11 +46,12 @@ def _post(cli: httpx.Client, url: str, body: dict, tries: int = 3):
     r.raise_for_status()
 
 
-def query_packages(pkgs: dict) -> dict:
-    """pkgs: {key: {eco,name,version}} -> {key: [vuln ids]} using querybatch."""
+def query_packages(pkgs: dict, fresh: bool = False) -> dict:
+    """pkgs: {key: {eco,name,version}} -> {key: [vuln ids]} using querybatch. fresh=True ignores cached answers
+    (a rescan must see advisories published after the cache was written)."""
     with _lock:
         cache = _load()
-    todo = [k for k in pkgs if k not in cache["queries"]]
+    todo = [k for k in pkgs if fresh or k not in cache["queries"]]
     with httpx.Client(timeout=60) as cli:
         for i in range(0, len(todo), 500):
             chunk = todo[i:i + 500]
