@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "The project lock files were regenerated to address identified security vulnerabilities.", "rationale": "The regeneration was performed to reduce the number of vulnerable dependencies across the repository.", "kind": "security-fix", "packages": []}

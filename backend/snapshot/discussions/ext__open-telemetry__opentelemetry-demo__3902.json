@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "The go.opentelemetry.io/contrib modules in src/checkout and src/product-catalog were upgraded to the v1.46.0/v0.71.0 release line.", "rationale": "This upgrade was performed to record error.type on rpc.client.call.duration and rpc.server.call.duration for failed RPCs.", "kind": "upgrade", "packages": ["go.opentelemetry.io/contrib"]}

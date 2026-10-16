@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Update vulnerable dependencies across the repository in a batch.", "rationale": "The dependencies were not automatically updated by dependabot this week.", "kind": "security-fix", "packages": []}

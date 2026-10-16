@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Hash-pin all Python dependencies and switch pip installs to use --require-hashes.", "rationale": "This change improves security by ensuring that installed dependencies match the expected hashes, similar to how npm lock files function.", "kind": "pin", "packages": []}

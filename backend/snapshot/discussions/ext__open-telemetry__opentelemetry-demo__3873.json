@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "The load generator is reverted from k6 back to Locust.", "rationale": "The k6 package is licensed under AGPL, which is incompatible with CNCF/OTel licensing requirements.", "kind": "removal", "packages": ["k6"]}

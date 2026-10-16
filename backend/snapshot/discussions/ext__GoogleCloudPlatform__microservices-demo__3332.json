@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "The uuid dependency was upgraded to version 14.", "rationale": "The upgrade addresses a security vulnerability where v3, v5, and v6 functions failed to perform bounds checks on output buffers, leading to silent partial writes.", "kind": "security-fix", "packages": ["uuid"]}

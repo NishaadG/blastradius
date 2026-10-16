@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Execute react native build on CI.", "rationale": "This build is faster than for Android, so it will reduce delays in the build pipeline.", "kind": "policy", "packages": ["react-native"]}

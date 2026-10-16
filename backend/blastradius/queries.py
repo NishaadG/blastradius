@@ -129,17 +129,21 @@ def experts(tenant, service):
 
 Q_DECISIONS = """
 MATCH (d:Decision)-[:DOCUMENTED_IN]->(k:Commit)
-WHERE ($svc = '' OR d.service = $svc) AND ($term = '' OR toLower(d.text) CONTAINS toLower($term))
+WHERE ($svc = '' OR d.service = $svc)
+  AND ($term = '' OR toLower(d.text) CONTAINS toLower($term) OR toLower(coalesce(d.rationale,'')) CONTAINS toLower($term)
+       OR toLower(coalesce(d.commit_msg,'')) CONTAINS toLower($term))
 OPTIONAL MATCH (newer:Decision)-[:SUPERSEDES]->(d)
-RETURN d.id, d.text, d.author, d.date, k.url, d.service, newer.id
-ORDER BY d.date DESC LIMIT 8
+OPTIONAL MATCH (d)-[:DISCUSSED_IN]->(pr:Discussion)
+RETURN d.id, d.text, d.author, d.date, k.url, d.service, newer.id, d.rationale, d.kind, pr.url, pr.title
+ORDER BY (d.rationale IS NOT NULL) DESC, d.date DESC LIMIT $lim
 """
 
 
-def decisions(tenant, service="", term=""):
-    rows, tr = _run(tenant, Q_DECISIONS, {"svc": service or "", "term": term or ""})
+def decisions(tenant, service="", term="", limit=8):
+    rows, tr = _run(tenant, Q_DECISIONS, {"svc": service or "", "term": term or "", "lim": limit})
     return [{"id": r[0], "text": r[1], "author": r[2], "date": r[3], "source": r[4], "service": r[5],
-             "superseded_by": r[6]} for r in rows], tr
+             "superseded_by": r[6], "rationale": r[7], "kind": r[8], "discussion": r[9], "discussion_title": r[10]}
+            for r in rows], tr
 
 
 # ---------------------------------------------------------------- algorithms

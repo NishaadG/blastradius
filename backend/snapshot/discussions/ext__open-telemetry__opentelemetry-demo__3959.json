@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Update security dependencies while excluding the shipping service due to a known issue.", "rationale": "The update is intended to resolve insecure dependencies, but the shipping service is excluded because it is blocked by an upstream issue in actix-web.", "kind": "security-fix", "packages": []}

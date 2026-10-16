@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Revert react-native dependency updates to the state of the first commit before dependabot PRs.", "rationale": "The updates were reverted to resolve issues introduced by dependabot by resetting the package.json and lock file to a known stable state.", "kind": "downgrade", "packages": ["react-native"]}

@@ -1,0 +1,1 @@
+{"is_decision": false, "decision": "Update dependency pino to v9.9.0.", "rationale": "", "kind": "routine", "packages": ["pino"]}

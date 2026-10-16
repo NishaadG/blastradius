@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Update github.com/jackc/pgx/v5 to version 5.9.2.", "rationale": "The update addresses a critical memory-safety vulnerability (CVE-2026-33816) and a potential SQL injection vulnerability (GHSA-j88v-2chj-qfwx).", "kind": "security-fix", "packages": ["github.com/jackc/pgx/v5"]}

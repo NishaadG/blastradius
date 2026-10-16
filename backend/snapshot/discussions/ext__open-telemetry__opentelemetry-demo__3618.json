@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "The checkout service's OTLP exporters for traces, metrics, and logs are migrated from gRPC to http/protobuf.", "rationale": "This change was made to align with the requirement specified in issue #2676.", "kind": "upgrade", "packages": ["otlp-exporters"]}

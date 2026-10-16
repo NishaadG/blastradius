@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "The go service configuration was updated to enable the host resource detector and migrate away from a deprecated experimental environment variable.", "rationale": "The previous environment variable used for configuration was deprecated, necessitating a move to the current standard.", "kind": "upgrade", "packages": []}

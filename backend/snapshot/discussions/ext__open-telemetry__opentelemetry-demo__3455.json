@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "The project will pin the version of aiohttp and greenlet in the requirements file.", "rationale": "The pinning was necessary to resolve compatibility issues and build errors caused by version mismatches in dependencies.", "kind": "pin", "packages": ["aiohttp", "greenlet"]}

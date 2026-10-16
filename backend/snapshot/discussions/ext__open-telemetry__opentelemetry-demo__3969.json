@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Upgrade smol-toml to 1.7.1 and js-yaml to 4.3.2 using package overrides.", "rationale": "These updates patch known denial-of-service vulnerabilities that could cause infinite loops or excessive CPU consumption during parsing.", "kind": "security-fix", "packages": ["smol-toml", "js-yaml"]}

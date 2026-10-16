@@ -150,6 +150,28 @@ def eval_tenant(tenant):
     check(f"{tenant}/reachability", f"govulncheck findings stored with identical call-graph level ({checked} checked)",
           bad_reach == 0 and checked > 0, f"{bad_reach} mismatches")
 
+    # PR-discussion reasoning: graph decisions equal the cached extractions, link to their PR, and name only packages the PR text mentions
+    import json as _j
+    from blastradius import discussions as _d
+    from blastradius.config import cached_path as _cp
+    stored = {r[0]: (r[1], r[2]) for r in db.read(tenant, "MATCH (x:Decision)-[:DISCUSSED_IN]->(d:Discussion) RETURN d.number, x.rationale, d.url").result_set}
+    n_ext = bad_store = ungrounded = 0
+    for num, c in _d.candidates(t).items():
+        pe, ee = _cp(f"discussions/pr__{t['repo'].replace('/', '__')}__{num}.json"), _cp(f"discussions/ext__{t['repo'].replace('/', '__')}__{num}.json")
+        if not (pe and ee):
+            continue
+        pr, ex = _j.loads(pe.read_text(encoding="utf-8")), _j.loads(ee.read_text(encoding="utf-8"))
+        if not ex["is_decision"] or not ex["rationale"].strip():
+            continue
+        n_ext += 1
+        if stored.get(int(num)) != (ex["rationale"], pr["url"]):
+            bad_store += 1
+        text = (pr["title"] + pr["body"] + " ".join(x["text"] for x in pr["comments"]) + c["msg"]).lower()
+        linked = db.read(tenant, "MATCH (x:Decision {id:$id})-[:CONCERNS]->(p:Package) RETURN DISTINCT p.name", {"id": "dec-" + c["sha"][:10]}).result_set
+        ungrounded += sum(1 for (nm,) in linked if nm.lower() not in text)
+    check(f"{tenant}/pr-reasoning", f"{n_ext} decisions carry the reasoning and link of their PR exactly as extracted", n_ext > 0 and bad_store == 0, f"{bad_store} mismatches")
+    check(f"{tenant}/pr-grounding", "every package a decision is linked to appears in its PR or commit text (no invented subjects)", ungrounded == 0, f"{ungrounded} ungrounded")
+
     humans = sum(1 for s in all_svcs for e in q.experts(tenant, s)[0] if e["kind"] == "person")
     check(f"{tenant}/company-brain", "expertise includes real human contributors, not only bots", humans > 0, f"{humans} person-service links")
 

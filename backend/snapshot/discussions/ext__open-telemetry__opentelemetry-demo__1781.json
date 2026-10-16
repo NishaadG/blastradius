@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "A React Native example application was added to the demo.", "rationale": "The addition serves to demonstrate how mobile applications can be instrumented using existing JS OTEL packages and highlights current gaps in functionality for React Native developers.", "kind": "routine", "packages": []}

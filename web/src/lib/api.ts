@@ -151,7 +151,7 @@ export type ServiceCard = {
   service: string;
   owners: Owner[];
   experts: { name: string; kind: string; commits: number; last: string }[];
-  decisions: { id: string; text: string; author: string; date: string; source: string; superseded_by: string | null }[];
+  decisions: { id: string; text: string; author: string; date: string; source: string; superseded_by: string | null; rationale?: string | null; kind?: string | null; discussion?: string | null; discussion_title?: string | null }[];
   callers: Caller[];
   exposure_path: string[] | null;
   traces: Trace[];

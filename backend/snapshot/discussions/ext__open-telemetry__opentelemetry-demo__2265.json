@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "The load generator was updated to include LoggingInstrumentor, reorder initialization, use a consistent resource, and wrap tasks in spans.", "rationale": "These changes were made to automatically inject trace context into log records and improve observability by ensuring trace context is available for logs.", "kind": "policy", "packages": []}

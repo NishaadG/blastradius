@@ -33,6 +33,9 @@ TOOLS = [
     {"name": "service_brain",
      "description": "Owners, human experts and recent dependency decisions (with source commits) for a service.",
      "parameters": {"type": "object", "properties": {"service": {"type": "string"}}, "required": ["service"]}},
+    {"name": "why_decision",
+     "description": "WHY a dependency was changed, pinned or upgraded, from the pull-request discussions behind it (with links). Use for 'why did we ...' questions.",
+     "parameters": {"type": "object", "properties": {"topic": {"type": "string", "description": "package or keyword, e.g. golang.org/x/net"}, "service": {"type": "string"}}, "required": ["topic"]}},
     {"name": "risk_board", "description": "Top vulnerabilities ranked by priority (severity x exposure).",
      "parameters": {"type": "object", "properties": {}}},
 ]
@@ -50,6 +53,8 @@ def call_tool(tenant: str, name: str, args: dict, sid: str = DEFAULT_SID):
             return toolkit.blast_radius(tenant, str(args.get("service", ""))), None
         if name == "service_brain":
             return toolkit.service_brain(tenant, str(args.get("service", ""))), None
+        if name == "why_decision":
+            return toolkit.why_decision(tenant, str(args.get("topic", "")), str(args.get("service", "") or "")), None
         if name == "risk_board":
             return toolkit.risk_board(tenant, 8), None
     except ToolError as e:
@@ -69,6 +74,8 @@ def _summarize(res: dict) -> str:
         return f"{len(res['upstream_callers'])} upstream caller(s); internet reachable: {res['internet_reachable']}"
     if "owners" in res and "recent_decisions" not in res:
         return ", ".join(o["owner"] for o in res["owners"]) or "no owner on record"
+    if "decisions" in res:
+        return f"{len(res['decisions'])} decision(s), {sum(1 for d in res['decisions'] if d.get('why'))} with a stated reason"
     if "recent_decisions" in res:
         return f"{len(res['owners'])} owner(s), {len(res['experts'])} expert(s), {len(res['recent_decisions'])} decision(s)"
     return str(res)[:90]
@@ -109,6 +116,16 @@ def _offline(tenant, question, sid):
         res, _, c = _timed_call(tenant, "who_owns", {"service": svc}, sid)
         calls.append(c)
         return (f"{svc} is owned by " + (", ".join(o["owner"] for o in res.get("owners", [])) or "nobody (no CODEOWNERS entry)")), calls, None
+    if re.search(r"\bwhy\b", low):
+        words = r"why|did|do|does|we|the|a|an|is|was|were|are|pin|pinned|upgrade|upgraded|update|updated|change|changed|bump|bumped|in|of|to|for|use|using"
+        topic = re.sub(rf"(?i)\b({words})\b|[?,]", " ", question).split()
+        topic = max(topic, key=len) if topic else ""
+        res, _, c = _timed_call(tenant, "why_decision", {"topic": topic, "service": svc or ""}, sid)
+        calls.append(c)
+        ds = [d for d in res.get("decisions", []) if d.get("why")] or res.get("decisions", [])
+        if ds:
+            d = ds[0]
+            return f"{d['text']} {d.get('why', '')} ({d['date']}, {d.get('discussion') or d['source']})".strip(), calls, None
     if svc and re.search(r"blast|radius|impact|depend|call|expos", low):
         res, _, c = _timed_call(tenant, "blast_radius", {"service": svc}, sid)
         calls.append(c)

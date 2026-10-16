@@ -2,7 +2,7 @@
 
 Ground truth is computed **without the graph** (raw lockfiles, cached OSV data, topology discovered from deployment files, CODEOWNERS) and compared with what the FalkorDB-backed product returns.
 
-**37/37 checks passed.**
+**41/41 checks passed.**
 
 | Group | Check | Result | Detail |
 |---|---|---|---|
@@ -16,6 +16,8 @@ Ground truth is computed **without the graph** (raw lockfiles, cached OSV data, 
 | otel/ownership | owners equal CODEOWNERS for 18 services | PASS | 0 mismatches |
 | otel/blast-radius | transitive upstream callers equal reverse-BFS for 18 services | PASS | 0 mismatches |
 | otel/reachability | govulncheck findings stored with identical call-graph level (11 checked) | PASS | 0 mismatches |
+| otel/pr-reasoning | 37 decisions carry the reasoning and link of their PR exactly as extracted | PASS | 0 mismatches |
+| otel/pr-grounding | every package a decision is linked to appears in its PR or commit text (no invented subjects) | PASS | 0 ungrounded |
 | otel/company-brain | expertise includes real human contributors, not only bots | PASS | 118 person-service links |
 | boutique/coverage | every OSV advisory for this tenant's packages is in the graph | PASS | 88 vs 88 |
 | boutique/affected-services | affected service set equals independent computation for 88 advisories | PASS | 0 mismatches |
@@ -27,6 +29,8 @@ Ground truth is computed **without the graph** (raw lockfiles, cached OSV data, 
 | boutique/ownership | owners equal CODEOWNERS for 12 services | PASS | 0 mismatches |
 | boutique/blast-radius | transitive upstream callers equal reverse-BFS for 12 services | PASS | 0 mismatches |
 | boutique/reachability | govulncheck findings stored with identical call-graph level (30 checked) | PASS | 0 mismatches |
+| boutique/pr-reasoning | 12 decisions carry the reasoning and link of their PR exactly as extracted | PASS | 0 mismatches |
+| boutique/pr-grounding | every package a decision is linked to appears in its PR or commit text (no invented subjects) | PASS | 0 ungrounded |
 | boutique/company-brain | expertise includes real human contributors, not only bots | PASS | 50 person-service links |
 | scenario | Log4Shell (Maven) is NOT_AFFECTED by proof of absence | PASS |  |
 | scenario | protobufjs advisory with a fixed version in use is NOT_AFFECTED (version outside range) | PASS | CVE-2023-36665 targets protobufjs, but you run 6.11.4, 7.6.5, 7.6.6, 7.5.9: outside the affected range. |

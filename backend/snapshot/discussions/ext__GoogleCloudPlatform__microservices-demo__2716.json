@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "The Go version in go.mod files is updated to 1.23.", "rationale": "The Dockerfiles were already using Go 1.23, so the go.mod files were updated to match this version.", "kind": "upgrade", "packages": ["go"]}

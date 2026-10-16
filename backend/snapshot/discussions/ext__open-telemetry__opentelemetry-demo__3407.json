@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Update vulnerable Go dependencies and add a frontend override for the qs package.", "rationale": "The updates were performed to address identified security vulnerabilities in golang.org/x/crypto, golang.org/x/net, and qs.", "kind": "security-fix", "packages": ["golang.org/x/crypto", "golang.org/x/net", "golang.org/x/sys", "qs"]}

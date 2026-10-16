@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Added aiSlowResponse and aiRunawayAgent feature flags to the agent service using an OpenFeature flagd provider.", "rationale": "These flags were added to simulate LLM provider latency degradation and runaway/looping agent behavior for incident testing.", "kind": "policy", "packages": ["flagd"]}

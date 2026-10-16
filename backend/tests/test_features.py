@@ -407,3 +407,20 @@ def test_ci_local_fetch_reads_checkout(tmp_path):
         assert ingest.fetch("local/t", "HEAD", "../../etc/passwd") is None
     finally:
         ingest.LOCAL_ROOT.pop("local/t")
+
+
+# ------------------------------------------------------------------ PR reasoning
+def test_grounded_drops_paraphrased_package_names():
+    from blastradius import discussions
+    pr = {"title": "Bump golang.org/x/net", "body": "fixes CVE", "comments": [{"author": "a", "text": "also see flask"}]}
+    assert discussions.grounded(["golang.org/x/net", "otlp-exporters", "Flask"], pr, "") == ["golang.org/x/net", "flask"]
+
+
+@needs_boutique
+def test_why_decision_returns_reasoning_with_link_and_tolerates_bad_service():
+    from blastradius import toolkit
+    r = toolkit.why_decision("boutique", "golang.org/x/net", "not-a-service")
+    why = [d for d in r["decisions"] if d.get("why")]
+    assert why and why[0]["discussion"].startswith("https://github.com/GoogleCloudPlatform/microservices-demo/pull/")
+    with pytest.raises(toolkit.ToolError):
+        toolkit.why_decision("boutique", "x; DROP", "")

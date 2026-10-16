@@ -94,8 +94,28 @@ def service_brain(tenant: str, service: str) -> dict:
     return {"service": service, "owners": owners,
             "experts": [e for e in experts if e["kind"] != "bot"][:5],
             "automation": [e["name"] for e in experts if e["kind"] == "bot"],
-            "recent_decisions": [{"text": d["text"], "by": d["author"], "date": d["date"][:10], "source": d["source"],
-                                  "superseded": bool(d["superseded_by"])} for d in decisions[:5]]}
+            "recent_decisions": [_dec(d) for d in decisions[:5]]}
+
+
+def _dec(d: dict) -> dict:
+    out = {"text": d["text"], "by": d["author"], "date": d["date"][:10], "source": d["source"],
+           "superseded": bool(d["superseded_by"])}
+    if d.get("rationale"):
+        out["why"] = d["rationale"]
+        out["discussion"] = d["discussion"]
+    return out
+
+
+def why_decision(tenant: str, topic: str, service: str = "") -> dict:
+    """Why was a dependency changed/pinned/upgraded? Answers from pull-request discussions, with links."""
+    check_tenant(tenant)
+    if service and service not in {n["id"] for n in q.service_graph(tenant)[0]["nodes"]}:
+        service = ""  # a wrong service name widens the search instead of failing it
+    topic = (topic or "").strip()
+    if topic and not NAME_RE.match(topic):
+        raise ToolError("invalid topic: use a package or service name")
+    rows, _ = q.decisions(tenant, service, topic, limit=6)
+    return {"topic": topic, "service": service or None, "decisions": [_dec(d) for d in rows]}
 
 
 def record_decision(tenant: str, advisory_id: str, decision: str, rationale: str, services: list[str],

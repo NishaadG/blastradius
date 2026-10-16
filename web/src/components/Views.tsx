@@ -246,7 +246,7 @@ export function CompanyView({
       </div>
 
       <div className="scroll -mr-3 min-h-0 flex-1 overflow-y-auto pr-3 pt-4">
-        {!selected && <Empty title="Pick a service" hint="Who owns it, who knows it, and the decisions behind its dependencies, each traced to a commit." />}
+        {!selected && <Empty title="Pick a service" hint="Who owns it, who knows it, and the decisions behind its dependencies, each traced to a commit and, where one exists, the PR discussion that explains why." />}
         {loading && <Loading what="Querying the graph" />}
         {card && (
           <div className="fade-in">
@@ -301,6 +301,17 @@ export function CompanyView({
                     <a href={d.source} target="_blank" rel="noreferrer" className="block text-[13px] leading-snug hover:text-blue">
                       {d.text}
                     </a>
+                    {d.rationale && (
+                      <p className="mt-1 border-l-2 border-rule pl-2.5 text-[12.5px] leading-snug text-ink-2">
+                        <span className="label !text-[10px] mr-1.5">why</span>
+                        {d.rationale}{" "}
+                        {d.discussion && (
+                          <a href={d.discussion} target="_blank" rel="noreferrer" className="text-blue hover:underline">
+                            PR discussion ↗
+                          </a>
+                        )}
+                      </p>
+                    )}
                     <div className="mt-1 flex items-baseline gap-2 text-[11.5px] text-faint">
                       <span>{d.author}</span>
                       <span className="mono">{d.date.slice(0, 10)}</span>

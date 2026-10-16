@@ -7,7 +7,7 @@
 import shutil
 import sys
 
-from . import brain, ingest, reach
+from . import brain, discussions, ingest, reach
 from .config import CACHE_DIR, SNAPSHOT_DIR
 from .tenants import TENANTS
 
@@ -32,4 +32,5 @@ if __name__ == "__main__":
         for name in args or list(TENANTS):
             ingest.ingest(name)
             brain.ingest(name)
+            discussions.ingest(name)
             reach.ingest(name)

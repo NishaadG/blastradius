@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "The product-catalog service is configured to report its status to the OpAMP server using the opamp-go client.", "rationale": "This change enables the Go SDK-instrumented application to appear in the OpAMP UI, following the same pattern used for the cart service.", "kind": "policy", "packages": ["opamp-go"]}

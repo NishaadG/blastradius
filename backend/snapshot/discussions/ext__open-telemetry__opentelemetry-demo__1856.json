@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "The loadgenerator service was renamed to load-generator.", "rationale": "This change is part of an effort to standardize service naming across all components in the demo.", "kind": "policy", "packages": ["loadgenerator"]}

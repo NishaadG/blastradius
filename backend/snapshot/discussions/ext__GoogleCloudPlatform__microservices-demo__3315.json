@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Update go.opentelemetry.io/otel/sdk to v1.43.0.", "rationale": "This addresses CVE-2026-39883, which prevented PATH hijacking caused by executing the kenv command without an absolute path on BSD and Solaris systems.", "kind": "security-fix", "packages": ["go.opentelemetry.io/otel/sdk"]}

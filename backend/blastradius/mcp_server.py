@@ -85,6 +85,13 @@ def service_brain(tenant: str, service: str) -> dict:
     return _safe(toolkit.service_brain, tenant, service)
 
 
+@mcp.tool()
+def why_decision(tenant: str, topic: str, service: str = "") -> dict:
+    """Why was a dependency changed, pinned or upgraded? Reads the reasoning from the pull-request discussions behind
+    the change, with links to the source. Empty when no discussion explains it."""
+    return _safe(toolkit.why_decision, tenant, topic, service)
+
+
 if not config.PUBLIC:
 
     @mcp.tool()

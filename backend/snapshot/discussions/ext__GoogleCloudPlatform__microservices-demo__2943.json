@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Update golang.org/x/net to version 0.38.0.", "rationale": "The update addresses security vulnerabilities CVE-2025-22870 and CVE-2025-22872 related to proxy pattern matching and tokenizer behavior.", "kind": "security-fix", "packages": ["golang.org/x/net"]}

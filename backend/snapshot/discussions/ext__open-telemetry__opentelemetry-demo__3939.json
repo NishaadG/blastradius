@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "The frontend/react-native-app dependencies were updated to address security vulnerabilities.", "rationale": "The changes were made to perform security bumps on the application dependencies.", "kind": "security-fix", "packages": ["frontend/react-native-app"]}

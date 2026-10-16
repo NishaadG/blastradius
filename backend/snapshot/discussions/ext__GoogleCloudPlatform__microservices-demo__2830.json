@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Update golang.org/x/net to v0.33.0.", "rationale": "This update addresses CVE-2024-45338, which could allow an attacker to cause a denial of service due to extremely slow parsing.", "kind": "security-fix", "packages": ["golang.org/x/net"]}

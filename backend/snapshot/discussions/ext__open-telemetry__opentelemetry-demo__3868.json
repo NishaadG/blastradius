@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "The payment service will depend only on the OpenTelemetry API instead of the OpenTelemetry SDK.", "rationale": "This change enables the use of the OpenTelemetry Operator for auto-instrumentation in Kubernetes by allowing the SDK to be swapped at runtime.", "kind": "removal", "packages": ["@opentelemetry/api"]}

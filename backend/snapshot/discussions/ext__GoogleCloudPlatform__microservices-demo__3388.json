@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Update @grpc/grpc-js to version 1.14.4.", "rationale": "This update addresses a security vulnerability where an incoming malformed compressed message can cause a client or server crash.", "kind": "security-fix", "packages": ["@grpc/grpc-js"]}

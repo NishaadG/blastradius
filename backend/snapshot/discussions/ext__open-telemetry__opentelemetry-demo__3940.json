@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Pino logs were added to the frontend service and exported through the NodeSDK with trace correlation.", "rationale": "This change was implemented to provide observability for the frontend service.", "kind": "policy", "packages": ["pino"]}

@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "The payment service will now set the error.type attribute on error spans in charge.js and index.js.", "rationale": "The OpenTelemetry Semantic Conventions require the error.type attribute when a span status is set to ERROR to allow for proper grouping and filtering of error metrics in observability platforms.", "kind": "policy", "packages": []}
