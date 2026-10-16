@@ -160,5 +160,5 @@ tools/                 Playwright helpers, outsider probe
 - The Maven/Gradle parsers read literal versions; versions that come from a parent BOM are recovered through deps.dev resolution, not by evaluating the build.
 - Discovery reads Compose and Kubernetes env vars; calls made through other means (service meshes, hard-coded hosts) are not seen.
 - Analysed repos have no company-brain data (no commit history is ingested for them) and unknown exposure.
-- The Gemini tool loop is tested against a mock model server; it has not been exercised against the live API unless you set a key.
+- The Gemini tool loop is covered by mock-server tests and has been exercised against the live API (it falls back through several Flash models if one is overloaded or retired). Without a key, the deterministic router answers instead.
 - A hosted demo can be rate-limited by GitHub's anonymous API quota; the repo analyser says so and suggests running locally.
