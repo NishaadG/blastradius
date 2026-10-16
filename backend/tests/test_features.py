@@ -380,3 +380,30 @@ def test_mcp_server_public_mode_is_read_only_and_answers():
     assert payload["verdict"] == "AFFECTED" and payload["services"]
     assert "error" in json.loads(bad.content[0].text)
     assert runs("mcp") == before                                  # read-only: the triage left no trace
+
+
+# ------------------------------------------------------------------ CI gate
+def test_ci_discovers_local_manifests_and_emits_sarif(tmp_path):
+    from blastradius import ci
+    (tmp_path / "requirements.txt").write_text("django==2.2.0\n")
+    (tmp_path / "svc" / "node_modules" / "x").mkdir(parents=True)
+    (tmp_path / "svc" / "node_modules" / "x" / "package-lock.json").write_text("{}")
+    (tmp_path / "svc" / "go.mod").write_text("module x\n")
+    svcs = ci.discover_local(str(tmp_path), "app")
+    assert {(s["path"], s["file"]) for s in svcs} == {("", "requirements.txt"), ("svc", "go.mod")}
+    item = {"id": "PYSEC-1", "cve": "CVE-2020-1", "severity": "CRITICAL", "summary": "bad", "services": ["svc"],
+            "packages": ["django@2.2.0"], "fixed": ["2.2.28"], "priority": "P0"}
+    out = ci.sarif([item], svcs)
+    res = out["runs"][0]["results"][0]
+    assert res["level"] == "error" and res["ruleId"] == "CVE-2020-1"
+    assert res["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] == "svc/go.mod"
+
+
+def test_ci_local_fetch_reads_checkout(tmp_path):
+    (tmp_path / "go.mod").write_text("module x\n")
+    ingest.LOCAL_ROOT["local/t"] = str(tmp_path)
+    try:
+        assert ingest.fetch("local/t", "HEAD", "go.mod") == "module x\n"
+        assert ingest.fetch("local/t", "HEAD", "../../etc/passwd") is None
+    finally:
+        ingest.LOCAL_ROOT.pop("local/t")

@@ -154,6 +154,11 @@ deploy/                production compose, Caddyfile, AWS scripts
 tools/                 Playwright helpers, outsider probe
 ```
 
+## CI gate and scheduled watcher
+
+- **GitHub Action / CLI.** `python -m blastradius.ci --path . --baseline ../base --fail-on P0 --sarif out.sarif` builds the graph for the checkout, ranks advisories with the same deterministic judge, writes SARIF for the Security tab and a job summary, and exits 1 when the change *introduces* a finding at or above the threshold. `action.yml` wraps it (it starts a FalkorDB container on the runner); `docs/ci/blastradius.yml` is a ready workflow. Exposure is unknown from a checkout alone, so serious production advisories are ranked as exposed.
+- **Watcher.** With `BR_WATCH_HOURS` set (the hosted deploy uses 6) the API re-queries OSV for every curated tenant on a schedule and marks advisories published since the graph was built; the risk board shows them as NEW.
+
 ## Limitations (honest)
 - Reachability is **function-level only for Go** (govulncheck). For npm, PyPI and Maven it is package-level: a vulnerable function that is never called still counts as a path, and the case file says "not analysed".
 - The two curated tenants' `go.mod` and pinned `requirements.txt` are flat lists, so those services have direct dependency edges only; analysed repos get resolved transitive trees from deps.dev (up to 60 direct dependencies per manifest).

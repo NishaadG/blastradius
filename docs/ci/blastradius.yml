@@ -1,0 +1,16 @@
+# Drop into .github/workflows/. Blocks a pull request that introduces a P0, and shows findings in the Security tab.
+name: blastradius
+on: [pull_request]
+permissions: {contents: read, security-events: write}
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4          # the base branch, so only what this PR introduces can fail it
+        with: {ref: "${{ github.base_ref }}", path: base}
+      - uses: NishaadG/blastradius@main
+        with: {baseline: base, fail-on: P0}
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with: {sarif_file: blastradius.sarif}

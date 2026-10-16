@@ -1,0 +1,29 @@
+name: Blastradius
+description: Graph-based supply-chain triage. Fails the build when a change introduces a serious vulnerable dependency, and uploads SARIF.
+inputs:
+  fail-on: {description: "Lowest priority that fails the build: P0, P1, P2 or never", default: "P0"}
+  path: {description: "Directory to analyse", default: "."}
+  baseline: {description: "Checkout of the base branch; only findings absent there can fail the build", default: ""}
+  sarif: {description: "SARIF output file", default: "blastradius.sarif"}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with: {python-version: "3.12"}
+    - name: Start FalkorDB
+      shell: bash
+      run: |
+        docker run -d --name br-falkordb -p 6379:6379 falkordb/falkordb:v4.14.10
+        for i in $(seq 1 30); do docker exec br-falkordb redis-cli ping 2>/dev/null | grep -q PONG && break; sleep 1; done
+    - name: Install Blastradius
+      shell: bash
+      run: pip install -q -r "${{ github.action_path }}/backend/requirements.txt"
+    - name: Analyse
+      shell: bash
+      working-directory: ${{ github.action_path }}/backend
+      env:
+        PYTHONPATH: ${{ github.action_path }}/backend
+      run: |
+        ARGS=(--path "$GITHUB_WORKSPACE/${{ inputs.path }}" --fail-on "${{ inputs.fail-on }}" --sarif "$GITHUB_WORKSPACE/${{ inputs.sarif }}" --summary "$GITHUB_STEP_SUMMARY")
+        if [ -n "${{ inputs.baseline }}" ]; then ARGS+=(--baseline "$GITHUB_WORKSPACE/${{ inputs.baseline }}"); fi
+        python -m blastradius.ci "${ARGS[@]}"

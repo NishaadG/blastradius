@@ -26,6 +26,7 @@ services:
       FALKOR_HOST: falkordb
       FALKOR_PASSWORD: ${FALKOR_PASSWORD}
       BR_PUBLIC: "1"
+      BR_WATCH_HOURS: "6"  # scheduled OSV rescan of the curated tenants
       SITE_ADDRESS: ${SITE_ADDRESS}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}

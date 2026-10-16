@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import re
@@ -10,7 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from redis.exceptions import RedisError
 
-from . import agent, bench, config, db, ingest, jobs, mcp_server, memory, queries as q, security, triage
+from . import agent, bench, config, db, ingest, jobs, mcp_server, memory, queries as q, security, tenants, triage, watch
 from .osv import valid_id
 from .security import ECOS, TENANT_RE, check_name, session_id
 
@@ -19,8 +20,27 @@ log = logging.getLogger("blastradius")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    async with mcp_server.mcp.session_manager.run():
-        yield
+    task = asyncio.create_task(_watch_loop()) if os.getenv("BR_WATCH_HOURS") else None
+    try:
+        async with mcp_server.mcp.session_manager.run():
+            yield
+    finally:
+        if task:
+            task.cancel()
+
+
+async def _watch_loop():
+    """Scheduled watcher: re-query OSV for every curated tenant every BR_WATCH_HOURS and record what is new."""
+    hours = max(0.5, float(os.getenv("BR_WATCH_HOURS", "6")))
+    await asyncio.sleep(60)
+    while True:
+        for t in tenants.TENANTS:
+            try:
+                r = await asyncio.to_thread(watch.rescan, t, lambda m: None)
+                log.info("watcher %s: %d applicable, %d new", t, r["applicable"], len(r["new"]))
+            except Exception as e:  # a failed pass must not kill the loop
+                log.warning("watcher %s failed: %s", t, e)
+        await asyncio.sleep(hours * 3600)
 
 
 app = FastAPI(title="Blastradius API", version="1.1", lifespan=lifespan, docs_url=None if config.PUBLIC else "/docs",

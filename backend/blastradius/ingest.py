@@ -33,7 +33,17 @@ def _rel(repo: str, path: str) -> str:
     return f"raw/{repo.replace('/', '__')}/{path.replace('/', '__')}"
 
 
+LOCAL_ROOT: dict[str, str] = {}  # pseudo-repo name -> checkout directory (CI mode reads the working tree, not GitHub)
+
+
 def fetch(repo: str, ref: str, path: str) -> str | None:
+    if repo in LOCAL_ROOT:
+        root = os.path.realpath(LOCAL_ROOT[repo])
+        f = os.path.realpath(os.path.join(root, path))
+        if os.path.commonpath([root, f]) == root and os.path.isfile(f) and os.path.getsize(f) <= MAX_FILE_BYTES:
+            with open(f, encoding="utf-8", errors="replace") as fh:
+                return fh.read()
+        return None
     p = cached_path(_rel(repo, path))
     if p:
         return p.read_text(encoding="utf-8")
