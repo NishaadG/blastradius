@@ -1,0 +1,143 @@
+{
+ "tool": "Go: go1.27.2\nScanner: govulncheck@v1.9.0\nDB: https://vuln.go.dev\nDB updated: 2026-10-08 22:31:09 +0000 UTC",
+ "findings": {
+  "GO-2026-6603": {
+   "level": "called",
+   "symbol": "http2.Framer.WriteWindowUpdate (http2/frame.go:1032)",
+   "stack": [
+    "genproto.Ad.Descriptor (genproto/demo.pb.go:1796)",
+    "genproto.file_demo_proto_rawDescGZIP (genproto/demo.pb.go:2099)",
+    "sync.Once.Do (src/sync/once.go:69)",
+    "sync.Once.doSlow (src/sync/once.go:78)",
+    "sync.OnceFunc$1$1 (src/sync/oncefunc.go:33)",
+    "pickfirst.pickfirstBalancer.ExitIdle (balancer/pickfirst/pickfirst.go:394)",
+    "pickfirst.pickfirstBalancer.startFirstPassLocked (balancer/pickfirst/pickfirst.go:405)",
+    "pickfirst.pickfirstBalancer.requestConnectionLocked (balancer/pickfirst/pickfirst.go:563)",
+    "grpc.acBalancerWrapper.Connect (balancer_wrapper.go:350)",
+    "grpc.addrConn.connect (clientconn.go:997)",
+    "grpc.addrConn.resetTransportAndUnlock (clientconn.go:1354)",
+    "grpc.addrConn.tryAllAddrs (clientconn.go:1471)"
+   ],
+   "ids": [
+    "GO-2026-6603",
+    "CVE-2026-78659"
+   ],
+   "fixed": "v0.60.0"
+  },
+  "GO-2026-6610": {
+   "level": "called",
+   "symbol": "http2.Transport.RoundTrip (http2/transport_common.go:225)",
+   "stack": [
+    "frontend.init#1 (deployment_details.go:19)",
+    "frontend.loadDeploymentDetails (deployment_details.go:45)",
+    "metadata.Client.InstanceAttributeValue (metadata.go:810)",
+    "metadata.Client.InstanceAttributeValueWithContext (metadata.go:822)",
+    "metadata.Client.GetWithContext (metadata.go:608)",
+    "metadata.Client.getETag (metadata.go:510)",
+    "metadata.Client.getETagWithSubClient (metadata.go:546)",
+    "http.Client.Do (src/net/http/client.go:604)",
+    "http.Client.do (src/net/http/client.go:745)",
+    "http.Client.send (src/net/http/client.go:187)",
+    "http.send (src/net/http/client.go:266)",
+    "http.Transport.RoundTrip (src/net/http/roundtrip.go:33)"
+   ],
+   "ids": [
+    "GO-2026-6610",
+    "CVE-2026-78660"
+   ],
+   "fixed": "v0.60.0"
+  },
+  "GO-2026-6611": {
+   "level": "called",
+   "symbol": "http2.headerFieldNameError.Error (http2/errors.go:132)",
+   "stack": [
+    "frontend.main (main.go:171)",
+    "http.ListenAndServe (src/net/http/server.go:3836)",
+    "http.Server.ListenAndServe (src/net/http/server.go:3485)",
+    "http.Server.Serve (src/net/http/server.go:3604)",
+    "http.conn.serve (src/net/http/server.go:2003)",
+    "http2.headerFieldNameError.Error (http2/errors.go:132)"
+   ],
+   "ids": [
+    "GO-2026-6611",
+    "CVE-2026-78669"
+   ],
+   "fixed": "v0.60.0"
+  },
+  "GO-2026-6612": {
+   "level": "called",
+   "symbol": "http2.Framer.WriteGoAway (http2/frame.go:966)",
+   "stack": [
+    "genproto.Ad.Descriptor (genproto/demo.pb.go:1796)",
+    "genproto.file_demo_proto_rawDescGZIP (genproto/demo.pb.go:2099)",
+    "sync.Once.Do (src/sync/once.go:69)",
+    "sync.Once.doSlow (src/sync/once.go:78)",
+    "sync.OnceFunc$1$1 (src/sync/oncefunc.go:33)",
+    "pickfirst.pickfirstBalancer.ExitIdle (balancer/pickfirst/pickfirst.go:394)",
+    "pickfirst.pickfirstBalancer.startFirstPassLocked (balancer/pickfirst/pickfirst.go:405)",
+    "pickfirst.pickfirstBalancer.requestConnectionLocked (balancer/pickfirst/pickfirst.go:563)",
+    "grpc.acBalancerWrapper.Connect (balancer_wrapper.go:350)",
+    "grpc.addrConn.connect (clientconn.go:997)",
+    "grpc.addrConn.resetTransportAndUnlock (clientconn.go:1354)",
+    "grpc.addrConn.tryAllAddrs (clientconn.go:1471)"
+   ],
+   "ids": [
+    "GO-2026-6612",
+    "CVE-2026-78663"
+   ],
+   "fixed": "v0.60.0"
+  },
+  "GO-2026-6617": {
+   "level": "called",
+   "symbol": "http2.Framer.WriteContinuation (http2/frame.go:1430)",
+   "stack": [
+    "genproto.Ad.Descriptor (genproto/demo.pb.go:1796)",
+    "genproto.file_demo_proto_rawDescGZIP (genproto/demo.pb.go:2099)",
+    "sync.Once.Do (src/sync/once.go:69)",
+    "sync.Once.doSlow (src/sync/once.go:78)",
+    "sync.OnceFunc$1$1 (src/sync/oncefunc.go:33)",
+    "pickfirst.pickfirstBalancer.ExitIdle (balancer/pickfirst/pickfirst.go:394)",
+    "pickfirst.pickfirstBalancer.startFirstPassLocked (balancer/pickfirst/pickfirst.go:405)",
+    "pickfirst.pickfirstBalancer.requestConnectionLocked (balancer/pickfirst/pickfirst.go:563)",
+    "grpc.acBalancerWrapper.Connect (balancer_wrapper.go:350)",
+    "grpc.addrConn.connect (clientconn.go:997)",
+    "grpc.addrConn.resetTransportAndUnlock (clientconn.go:1354)",
+    "grpc.addrConn.tryAllAddrs (clientconn.go:1471)"
+   ],
+   "ids": [
+    "GO-2026-6617",
+    "CVE-2026-97032"
+   ],
+   "fixed": "v0.60.0"
+  },
+  "GO-2026-5932": {
+   "level": "required",
+   "symbol": "golang.org/x/crypto",
+   "stack": [],
+   "ids": [
+    "GO-2026-5932"
+   ],
+   "fixed": null
+  },
+  "GO-2026-6354": {
+   "level": "required",
+   "symbol": "golang.org/x/crypto",
+   "stack": [],
+   "ids": [
+    "GO-2026-6354",
+    "CVE-2026-78662"
+   ],
+   "fixed": "v0.56.0"
+  },
+  "GO-2026-6355": {
+   "level": "required",
+   "symbol": "golang.org/x/crypto",
+   "stack": [],
+   "ids": [
+    "GO-2026-6355",
+    "CVE-2026-56855"
+   ],
+   "fixed": "v0.56.0"
+  }
+ }
+}

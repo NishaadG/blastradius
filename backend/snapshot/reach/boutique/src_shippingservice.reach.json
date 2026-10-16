@@ -1,0 +1,123 @@
+{
+ "tool": "Go: go1.27.2\nScanner: govulncheck@v1.9.0\nDB: https://vuln.go.dev\nDB updated: 2026-10-08 22:31:09 +0000 UTC",
+ "findings": {
+  "GO-2026-5932": {
+   "level": "required",
+   "symbol": "golang.org/x/crypto",
+   "stack": [],
+   "ids": [
+    "GO-2026-5932"
+   ],
+   "fixed": null
+  },
+  "GO-2026-6603": {
+   "level": "called",
+   "symbol": "http2.Framer.WriteContinuation (http2/frame.go:1430)",
+   "stack": [
+    "shippingservice.main (main.go:99)",
+    "grpc.Server.Serve (server.go:973)",
+    "grpc.Serve$3 (server.go:974)",
+    "grpc.Server.handleRawConn (server.go:990)",
+    "grpc.Server.newHTTP2Transport (server.go:1033)",
+    "transport.NewServerTransport (internal/transport/http2_server.go:348)",
+    "transport.NewServerTransport$3 (internal/transport/http2_server.go:350)",
+    "transport.loopyWriter.run (internal/transport/controlbuf.go:599)",
+    "transport.loopyWriter.handle (internal/transport/controlbuf.go:882)",
+    "transport.loopyWriter.serverHeaderHandler (internal/transport/controlbuf.go:692)",
+    "transport.loopyWriter.writeHeader (internal/transport/controlbuf.go:763)",
+    "http2.Framer.WriteContinuation (http2/frame.go:1430)"
+   ],
+   "ids": [
+    "GO-2026-6603",
+    "CVE-2026-78659"
+   ],
+   "fixed": "v0.60.0"
+  },
+  "GO-2026-6610": {
+   "level": "called",
+   "symbol": "http2.Transport.RoundTrip (http2/transport_common.go:278)",
+   "stack": [
+    "genproto.Ad.Descriptor (genproto/demo.pb.go:1796)",
+    "genproto.file_demo_proto_rawDescGZIP (genproto/demo.pb.go:2099)",
+    "sync.Once.Do (src/sync/once.go:69)",
+    "sync.Once.doSlow (src/sync/once.go:78)",
+    "metadata.OnGCEWithContext$1 (metadata.go:135)",
+    "metadata.Client.OnGCEWithContext (metadata.go:469)",
+    "metadata.init$1 (metadata.go:433)",
+    "http.Client.Do (src/net/http/client.go:604)",
+    "http.Client.do (src/net/http/client.go:745)",
+    "http.Client.send (src/net/http/client.go:187)",
+    "http.send (src/net/http/client.go:266)",
+    "http.Transport.RoundTrip (src/net/http/roundtrip.go:33)"
+   ],
+   "ids": [
+    "GO-2026-6610",
+    "CVE-2026-78660"
+   ],
+   "fixed": "v0.60.0"
+  },
+  "GO-2026-6611": {
+   "level": "called",
+   "symbol": "http2.Transport.RoundTrip (http2/transport_common.go:278)",
+   "stack": [
+    "genproto.Ad.Descriptor (genproto/demo.pb.go:1796)",
+    "genproto.file_demo_proto_rawDescGZIP (genproto/demo.pb.go:2099)",
+    "sync.Once.Do (src/sync/once.go:69)",
+    "sync.Once.doSlow (src/sync/once.go:78)",
+    "metadata.OnGCEWithContext$1 (metadata.go:135)",
+    "metadata.Client.OnGCEWithContext (metadata.go:469)",
+    "metadata.init$1 (metadata.go:433)",
+    "http.Client.Do (src/net/http/client.go:604)",
+    "http.Client.do (src/net/http/client.go:745)",
+    "http.Client.send (src/net/http/client.go:187)",
+    "http.send (src/net/http/client.go:266)",
+    "http.Transport.RoundTrip (src/net/http/roundtrip.go:33)"
+   ],
+   "ids": [
+    "GO-2026-6611",
+    "CVE-2026-78669"
+   ],
+   "fixed": "v0.60.0"
+  },
+  "GO-2026-6612": {
+   "level": "called",
+   "symbol": "http2.Framer.WriteSettings (http2/frame.go:878)",
+   "stack": [
+    "shippingservice.main (main.go:99)",
+    "grpc.Server.Serve (server.go:973)",
+    "grpc.Serve$3 (server.go:974)",
+    "grpc.Server.handleRawConn (server.go:990)",
+    "grpc.Server.newHTTP2Transport (server.go:1033)",
+    "transport.NewServerTransport (internal/transport/http2_server.go:217)",
+    "http2.Framer.WriteSettings (http2/frame.go:878)"
+   ],
+   "ids": [
+    "GO-2026-6612",
+    "CVE-2026-78663"
+   ],
+   "fixed": "v0.60.0"
+  },
+  "GO-2026-6617": {
+   "level": "called",
+   "symbol": "http2.Framer.WriteSettingsAck (http2/frame.go:891)",
+   "stack": [
+    "shippingservice.main (main.go:99)",
+    "grpc.Server.Serve (server.go:973)",
+    "grpc.Serve$3 (server.go:974)",
+    "grpc.Server.handleRawConn (server.go:990)",
+    "grpc.Server.newHTTP2Transport (server.go:1033)",
+    "transport.NewServerTransport (internal/transport/http2_server.go:348)",
+    "transport.NewServerTransport$3 (internal/transport/http2_server.go:350)",
+    "transport.loopyWriter.run (internal/transport/controlbuf.go:599)",
+    "transport.loopyWriter.handle (internal/transport/controlbuf.go:876)",
+    "transport.loopyWriter.incomingSettingsHandler (internal/transport/controlbuf.go:668)",
+    "http2.Framer.WriteSettingsAck (http2/frame.go:891)"
+   ],
+   "ids": [
+    "GO-2026-6617",
+    "CVE-2026-97032"
+   ],
+   "fixed": "v0.60.0"
+  }
+ }
+}

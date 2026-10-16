@@ -58,6 +58,8 @@ def triage_advisory(tenant: str, identifier: str, sid: str = memory.DEFAULT_SID,
         "services": [{"service": s["service"], "internet_exposed": s["exposed"], "exposure_path": s.get("exposure_path"),
                       "dependency_chain": [p.split(":", 1)[-1] for p in min(s["paths"], key=lambda x: x["hops"])["path"]],
                       "fix": f"{s['paths'][0]['pkg']} >= {s['paths'][0]['fixed']}",
+                      "function_reachability": (s.get("reach") or {}).get("level") or "not analysed",
+                      "vulnerable_symbol": (s.get("reach") or {}).get("symbol"),
                       "owners": [o["owner"] for o in s.get("owners", [])]} for s in r["services"]],
         "precedents": [{"id": p["id"], "decision": p["decision"], "rationale": p["rationale"], "same_advisory": p["exact"]}
                        for p in r["precedents"]],

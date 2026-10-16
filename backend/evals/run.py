@@ -131,6 +131,25 @@ def eval_tenant(tenant):
             bad_callers += 1
     check(f"{tenant}/blast-radius", f"transitive upstream callers equal reverse-BFS for {len(all_svcs)} services", bad_callers == 0, f"{bad_callers} mismatches")
 
+    # function-level reachability: every govulncheck finding that matches an advisory in the graph is stored with the same level
+    import json as _json
+    from blastradius import reach as _reach
+    checked = bad_reach = 0
+    for s in _reach.go_services(tenant):
+        p = _reach.reach_dir(tenant) / (s["path"].replace("/", "_") + ".reach.json")
+        if not p.exists():
+            continue
+        for osv_id, f in _json.loads(p.read_text(encoding="utf-8"))["findings"].items():
+            adv = db.read(tenant, "MATCH (a:Advisory) WHERE a.id IN $ids OR a.cve IN $ids RETURN a.id", {"ids": f["ids"]}).result_set
+            for (aid,) in adv:
+                checked += 1
+                got = db.read(tenant, "MATCH (:Service {name:$s})-[r:REACHES]->(:Advisory {id:$a}) RETURN r.level",
+                              {"s": s["name"], "a": aid}).result_set
+                if not got or got[0][0] != f["level"]:
+                    bad_reach += 1
+    check(f"{tenant}/reachability", f"govulncheck findings stored with identical call-graph level ({checked} checked)",
+          bad_reach == 0 and checked > 0, f"{bad_reach} mismatches")
+
     humans = sum(1 for s in all_svcs for e in q.experts(tenant, s)[0] if e["kind"] == "person")
     check(f"{tenant}/company-brain", "expertise includes real human contributors, not only bots", humans > 0, f"{humans} person-service links")
 

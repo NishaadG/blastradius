@@ -83,6 +83,8 @@ export function RiskBoard({
                   <span className="mono truncate text-[11.5px] text-ink-2">
                     {a.cve ?? a.id}
                     {a.new && <span className="label ml-2 !text-amber">new</span>}
+                    {a.reach === "called" && <span className="label ml-2 !text-red" title="govulncheck: the vulnerable function is called">called</span>}
+                    {a.reach === "not_called" && <span className="label ml-2 !text-green" title="govulncheck: no call path to the vulnerable function">not called</span>}
                   </span>
                   <Severity s={a.severity} />
                 </div>

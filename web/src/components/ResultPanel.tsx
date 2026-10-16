@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import clsx from "clsx";
-import { api, TriageResult } from "@/lib/api";
+import { api, ServiceFinding, TriageResult } from "@/lib/api";
 import { Cypher, Label, Priority, Severity, VERDICT, timeAgo } from "./ui";
 
 function Chain({ items, hot }: { items: string[]; hot?: boolean }) {
@@ -21,6 +21,27 @@ function Chain({ items, hot }: { items: string[]; hot?: boolean }) {
       ))}
     </span>
   );
+}
+
+/** Function-level evidence from govulncheck (Go only): is the vulnerable function actually callable from this code? */
+function Reach({ r }: { r?: ServiceFinding["reach"] }) {
+  if (!r?.analyzed) return <span className="text-faint">not analysed (function-level analysis covers Go services)</span>;
+  if (r.level === "called")
+    return (
+      <details>
+        <summary className="cursor-pointer">
+          <span className="font-medium text-red">called</span> <span className="mono text-[11.5px]">{r.symbol}</span>
+        </summary>
+        <ol className="mono mt-1 border-l-2 border-red pl-3 text-[11px] leading-[1.7] text-ink-2">
+          {(r.stack ?? []).map((f, i) => (
+            <li key={i}>{i > 0 && <span className="text-faint">↳ </span>}{f}</li>
+          ))}
+        </ol>
+      </details>
+    );
+  if (r.level === "imported") return <span className="text-green">package imported, but no call path reaches the vulnerable function</span>;
+  if (r.level === "required") return <span className="text-green">in the module graph only; your code never imports the vulnerable package</span>;
+  return <span className="text-ink-2">no govulncheck finding for this advisory</span>;
 }
 
 function Section({ title, right, children }: { title: string; right?: React.ReactNode; children: React.ReactNode }) {
@@ -123,6 +144,8 @@ export default function ResultPanel({
                     )}
                     <dt className="label pt-0.5">Dependency</dt>
                     <dd><Chain items={[s.service, ...best.path.slice(1).map((p) => p.slice(p.indexOf(":") + 1))]} hot /></dd>
+                    <dt className="label pt-0.5">Reachability</dt>
+                    <dd><Reach r={s.reach} /></dd>
                     <dt className="label pt-0.5">Fix</dt>
                     <dd className="mono text-[12px] text-green">{best.pkg} ≥ {best.fixed ?? "?"}</dd>
                     <dt className="label pt-0.5">Owners</dt>

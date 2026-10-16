@@ -100,6 +100,21 @@ def owners(tenant, service):
     return [{"owner": r[0], "kind": r[1]} for r in rows], tr
 
 
+def reachability(tenant, advisory_id):
+    """-> ({service: {level, symbol, stack}}, {analyzed services}). Function-level evidence (govulncheck, Go only)."""
+    rows, tr1 = _run(tenant, """MATCH (s:Service)-[r:REACHES]->(a:Advisory {id:$id}) RETURN s.name, r.level, r.symbol, r.stack""",
+                     {"id": advisory_id})
+    an, tr2 = _run(tenant, "MATCH (s:Service) WHERE s.reach_analyzed = true RETURN s.name")
+    return ({r[0]: {"level": r[1], "symbol": r[2], "stack": r[3] or []} for r in rows}, {r[0] for r in an}, [tr1, tr2])
+
+
+def all_reachability(tenant):
+    """-> ({(advisory id, service): level}, {analyzed services}) for the whole risk board in two queries."""
+    rows, _ = _run(tenant, "MATCH (s:Service)-[r:REACHES]->(a:Advisory) RETURN a.id, s.name, r.level")
+    an, _ = _run(tenant, "MATCH (s:Service) WHERE s.reach_analyzed = true RETURN s.name")
+    return {(r[0], r[1]): r[2] for r in rows}, {r[0] for r in an}
+
+
 Q_EXPERTS = """
 MATCH (p:Owner)-[c:COMMITTED]->(s:Service {name:$svc})
 RETURN p.name, coalesce(p.kind,'person'), c.count, c.last

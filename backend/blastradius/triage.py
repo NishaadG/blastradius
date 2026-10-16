@@ -118,9 +118,16 @@ def risk_board(tenant: str) -> dict:
         if not f["dev"]:
             a["prod"] = True
             a["exposed"] = a["exposed"] or exp_cache[f["service"]]
+    reach, analyzed = q.all_reachability(tenant)
     out = []
     for a in adv.values():
         prio = _priority(a["severity"], a["exposed"]) if a["prod"] else "DEV"
+        prod_svcs = [s for s, is_prod in a["services"].items() if is_prod]
+        levels = [reach.get((a["id"], s)) if s in analyzed else None for s in prod_svcs]
+        a["reach"] = ("called" if "called" in levels else
+                      "not_called" if prod_svcs and all(l in ("required", "imported") for l in levels) else None)
+        if a["reach"] == "not_called" and prio in ("P0", "P1"):
+            prio = "P2"
         out.append({**a, "services": sorted(a["services"]), "packages": sorted(a["packages"]),
                     "fixed": sorted(a["fixed"]), "priority": prio})
     order = {"P0": 0, "P1": 1, "P2": 2, "DEV": 3}
@@ -168,6 +175,14 @@ def run_triage(tenant: str, ident: str, sid: str = memory.DEFAULT_SID, record: b
             _step(steps, "Investigator", "blast_radius", f"{name}: {len(callers)} upstream caller(s); {what}", [tr1, tr2, tr3])
             if ep and len(ep) > 1:
                 callpaths.append(ep)
+        reach, analyzed, rtr = q.reachability(tenant, adv["id"])
+        for name, sv in by_service.items():
+            sv["reach"] = {"analyzed": name in analyzed, **(reach.get(name) or {})}
+        if analyzed & set(by_service):
+            called = [n for n in by_service if reach.get(n, {}).get("level") == "called"]
+            _step(steps, "Investigator", "reachability",
+                  (f"govulncheck: the vulnerable function is called in {', '.join(called)}" if called else
+                   "govulncheck: no call path from your code to the vulnerable function"), rtr)
         pkg_names = {p["pkg"] for p in paths}
         precedents, tr = memory.find_precedents(tenant, adv["id"], pkg_names, sid)
         _step(steps, "Investigator", "find_precedents",
@@ -191,10 +206,18 @@ def run_triage(tenant: str, ident: str, sid: str = memory.DEFAULT_SID, record: b
             else:
                 tail = "Reachable from an internet-exposed entry point." if exposed else "Not reachable from the internet."
             headline = f"Reaches {names} through a runtime dependency. {tail}"
+            lvl = [(s["reach"] or {}) for s in prod]
+            if all(r.get("analyzed") and r.get("level") in ("required", "imported") for r in lvl):
+                headline += " But govulncheck finds no call path to the vulnerable function, so real exposure is lower."
+            elif any(r.get("level") == "called" for r in lvl):
+                headline += " The vulnerable function is actually called by your code."
         else:
             verdict, reason = "NEEDS_HUMAN", "dev_only_dependency"
             headline = "Only dev-time dependency paths exist; confirm it is not shipped to production."
         prio = _priority(adv["severity"], any(s["exposed"] for s in prod)) if verdict == "AFFECTED" else None
+        if prio in ("P0", "P1") and all((s["reach"] or {}).get("analyzed") and (s["reach"] or {}).get("level") in ("required", "imported")
+                                        for s in prod):
+            prio = "P2"  # the vulnerable code is present but provably not called: demote, and say why in the headline
         _step(steps, "Judge", "deterministic_verdict", f"{verdict} ({reason})" + (f" priority {prio}" if prio else ""))
 
         # ---- remediator proposals (gated)

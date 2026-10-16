@@ -37,6 +37,7 @@ export type ServiceFinding = {
   exposed: boolean;
   exposure_path: string[] | null;
   exposure_unknown?: boolean;
+  reach?: { analyzed: boolean; level?: "called" | "imported" | "required"; symbol?: string; stack?: string[] };
   owners: Owner[];
   callers: Caller[];
 };
@@ -130,6 +131,7 @@ export type RiskItem = {
   fixed: string[];
   exposed: boolean;
   new?: boolean;
+  reach?: "called" | "not_called" | null;
   priority: "P0" | "P1" | "P2" | "DEV";
 };
 export type Risk = { advisories: RiskItem[]; summary: Record<string, number> };

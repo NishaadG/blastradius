@@ -30,6 +30,7 @@ Built for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB), enter
   ```
   Tools: `list_tenants`, `risk_board`, `triage_advisory`, `blast_radius`, `who_owns`, `service_brain`, and `record_decision` (local only; it is not registered on a public server).
 - **Chat.** A tool-calling loop on a free Gemini key (`GEMINI_API_KEY`); with no key a deterministic router answers the same tools, so everything works at $0.
+- **Know if the vulnerable function is actually called (Go).** For Go services, Blastradius brings in the official [`govulncheck`](https://go.dev/doc/security/vuln/) call-graph analysis: a vulnerable package is not a vulnerable *call*. The case file shows the real call stack (`shippingservice.main (main.go:99) → grpc.Server.Serve → … → http2.Framer.WriteContinuation`) or states that no call path exists, and a P0/P1 whose function is provably never called is demoted to P2 with the reason shown. Stored as `(Service)-[:REACHES {level, symbol, stack}]->(Advisory)`; the raw results are committed in the snapshot (`python -m blastradius.reach collect <tenant>` regenerates them in a Go container).
 - **Let it notice on its own.** **Rescan OSV** (or `python -m blastradius.watch --all` from cron) re-queries every package, finds advisories published since the graph was built, writes them into the graph marked *new*, and triages them with the same judge.
 - **Take the decision with you.** Approved decisions export as an **[OpenVEX](https://openvex.dev)** document (fixed / not affected with your rationale / risk accepted) from the Memory tab.
 - **Stress it.** The Memory tab runs 10/50/100 concurrent agents against shared graph memory.
@@ -105,9 +106,9 @@ All in [`queries.py`](backend/blastradius/queries.py) and [`memory.py`](backend/
 | Ownership, expertise, decisions | `OWNS`, `COMMITTED`, `Decision-[:DOCUMENTED_IN]->Commit` with `SUPERSEDES` for staleness |
 
 ## Does it work? [EVALS.md](EVALS.md) · [BENCH.md](BENCH.md)
-- `python -m evals.run` recomputes ground truth **without the graph** and compares it with the product: affected-service sets and verdicts for every advisory, that every returned path is a real chain of lockfile edges, exposure distances over the discovered topology, ownership, transitive callers, memory reuse, tenant **and session** isolation, and guardrails. Currently **35/35**.
+- `python -m evals.run` recomputes ground truth **without the graph** and compares it with the product: affected-service sets and verdicts for every advisory, that every returned path is a real chain of lockfile edges, exposure distances over the discovered topology, ownership, transitive callers, memory reuse, tenant **and session** isolation, and guardrails. Currently **37/37**, including that every govulncheck finding is stored in the graph with the identical call-graph level.
 - **Discovery is cross-checked** against the hand-written call lists from the projects' docs: 100% recall on OpenTelemetry (plus 7 calls only the deployment files reveal) and 94% on Online Boutique. The one edge it misses (`shoppingassistantservice → productcatalogservice`) is in no deployment file; EVALS.md reports it rather than hiding it.
-- `pytest backend/tests`: **30 tests**: parsers, discovery, MCP over stdio, the LLM loop against a mock model, repo analysis (network mocked, including a Log4Shell found only through a transitive dependency), validation, rate limiting, session isolation and backpressure.
+- `pytest backend/tests`: **34 tests**: parsers, discovery, MCP over stdio, the LLM loop against a mock model, repo analysis (network mocked, including a Log4Shell found only through a transitive dependency), validation, rate limiting, session isolation and backpressure.
 - [BENCH.md](BENCH.md): 10/50/100 concurrent agents on shared memory. Reads stay fast; writes queue (FalkorDB serialises them); the client retries on backpressure and counts every retry.
 
 ## Security model (public deployment)
@@ -154,7 +155,7 @@ tools/                 Playwright helpers, outsider probe
 ```
 
 ## Limitations (honest)
-- Reachability is **package-level**, not function-level: a vulnerable function that is never called still counts as a path.
+- Reachability is **function-level only for Go** (govulncheck). For npm, PyPI and Maven it is package-level: a vulnerable function that is never called still counts as a path, and the case file says "not analysed".
 - The two curated tenants' `go.mod` and pinned `requirements.txt` are flat lists, so those services have direct dependency edges only; analysed repos get resolved transitive trees from deps.dev (up to 60 direct dependencies per manifest).
 - The Maven/Gradle parsers read literal versions; versions that come from a parent BOM are recovered through deps.dev resolution, not by evaluating the build.
 - Discovery reads Compose and Kubernetes env vars; calls made through other means (service meshes, hard-coded hosts) are not seen.

@@ -124,6 +124,46 @@ def test_decisions_export_as_openvex():
     memory.reset_session(T, sid)
 
 
+def test_govulncheck_output_parses_into_reachability_levels():
+    from blastradius import reach
+
+    stream = "\n".join([
+        '{"config": {"scanner_name": "govulncheck"}}',
+        '{"osv": {"id": "GO-1", "aliases": ["CVE-1", "GHSA-a"]}}',
+        '{"finding": {"osv": "GO-1", "fixed_version": "v1.2", "trace": ['
+        '{"module": "m", "package": "m/p", "function": "Bad", "position": {"filename": "p.go", "line": 3}},'
+        '{"module": "app", "package": "app", "function": "main", "position": {"filename": "main.go", "line": 9}}]}}',
+        '{"finding": {"osv": "GO-2", "trace": [{"module": "m2", "package": "m2/q"}]}}',
+        '{"finding": {"osv": "GO-3", "trace": [{"module": "m3"}]}}',
+        '{"finding": {"osv": "GO-3", "trace": [{"module": "m3"}]}}',
+    ])
+    f = reach.parse(stream)
+    assert f["GO-1"]["level"] == "called" and f["GO-1"]["ids"] == ["GO-1", "CVE-1", "GHSA-a"] and f["GO-1"]["fixed"] == "v1.2"
+    assert f["GO-1"]["stack"][0].startswith("app.main") and "main.go:9" in f["GO-1"]["stack"][0]   # entry point first
+    assert f["GO-2"]["level"] == "imported" and f["GO-2"]["stack"] == []
+    assert f["GO-3"]["level"] == "required"
+
+
+def test_function_level_reachability_demotes_or_confirms_priority():
+    base = triage.run_triage(T, "CVE-2000-0001", record=False)
+    assert base["priority"] == "P0" and base["services"][0]["reach"]["analyzed"] is False   # not analysed: no change
+    db.write(T, "MATCH (s:Service {name:'api'}) SET s.reach_analyzed = true")
+    db.write(T, """MATCH (s:Service {name:'api'}),(a:Advisory {id:'GHSA-xxxx-xxxx-xxxx'})
+        MERGE (s)-[r:REACHES]->(a) SET r.level='imported', r.symbol='libB', r.stack=[]""")
+    demoted = triage.run_triage(T, "CVE-2000-0001", record=False)
+    assert demoted["verdict"] == "AFFECTED" and demoted["priority"] == "P2"            # verdict stays; urgency drops
+    assert "no call path" in demoted["headline"]
+    board = {a["id"]: a for a in triage.risk_board(T)["advisories"]}
+    assert board["GHSA-xxxx-xxxx-xxxx"]["priority"] == "P2" and board["GHSA-xxxx-xxxx-xxxx"]["reach"] == "not_called"
+    db.write(T, "MATCH (:Service {name:'api'})-[r:REACHES]->(:Advisory {id:'GHSA-xxxx-xxxx-xxxx'}) "
+                "SET r.level='called', r.symbol='libB.Bad', r.stack=['api.main (main.go:1)', 'libB.Bad (b.go:2)']")
+    called = triage.run_triage(T, "CVE-2000-0001", record=False)
+    assert called["priority"] == "P0" and "actually called" in called["headline"]
+    assert called["services"][0]["reach"]["stack"][0].startswith("api.main")
+    db.write(T, "MATCH (:Service {name:'api'})-[r:REACHES]->() DELETE r")
+    db.write(T, "MATCH (s:Service {name:'api'}) SET s.reach_analyzed = false")
+
+
 def test_read_path_blocks_writes():
     for bad in ("MATCH (n) DETACH DELETE n", "CREATE (:X)", "MATCH (n) SET n.a=1"):
         with pytest.raises(UnsafeQuery):

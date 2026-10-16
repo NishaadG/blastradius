@@ -1,0 +1,91 @@
+{
+ "tool": "Go: go1.27.2\nScanner: govulncheck@v1.9.0\nDB: https://vuln.go.dev\nDB updated: 2026-10-08 22:31:09 +0000 UTC",
+ "findings": {
+  "GO-2026-6603": {
+   "level": "called",
+   "symbol": "http2.headerFieldValueError.Error (http2/errors.go:138)",
+   "stack": [
+    "product-catalog.main (main.go:168)",
+    "errors.joinError.Error (src/errors/join.go:49)",
+    "http2.headerFieldValueError.Error (http2/errors.go:138)"
+   ],
+   "ids": [
+    "GO-2026-6603",
+    "CVE-2026-78659"
+   ],
+   "fixed": "v0.60.0"
+  },
+  "GO-2026-6610": {
+   "level": "called",
+   "symbol": "http2.Transport.RoundTrip (http2/transport_common.go:278)",
+   "stack": [
+    "oteldemo.DeleteFlagResponse.Descriptor (genproto/oteldemo/demo.pb.go:2216)",
+    "oteldemo.file_demo_proto_rawDescGZIP (genproto/oteldemo/demo.pb.go:2396)",
+    "sync.Once.Do (src/sync/once.go:69)",
+    "sync.Once.doSlow (src/sync/once.go:78)",
+    "metric.Shutdown$1 (periodic_reader.go:413)",
+    "otlpmetrichttp.Exporter.Export (exporter.go:77)",
+    "otlpmetrichttp.client.UploadMetrics (client.go:168)",
+    "retry.RequestFunc$1 (internal/retry/retry.go:65)",
+    "otlpmetrichttp.UploadMetrics$2 (client.go:178)",
+    "http.Client.Do (src/net/http/client.go:604)",
+    "http.Client.do (src/net/http/client.go:745)",
+    "http.Client.send (src/net/http/client.go:187)"
+   ],
+   "ids": [
+    "GO-2026-6610",
+    "CVE-2026-78660"
+   ],
+   "fixed": "v0.60.0"
+  },
+  "GO-2026-6611": {
+   "level": "called",
+   "symbol": "http2.headerFieldValueError.Error (http2/errors.go:138)",
+   "stack": [
+    "product-catalog.main (main.go:168)",
+    "errors.joinError.Error (src/errors/join.go:49)",
+    "http2.headerFieldValueError.Error (http2/errors.go:138)"
+   ],
+   "ids": [
+    "GO-2026-6611",
+    "CVE-2026-78669"
+   ],
+   "fixed": "v0.60.0"
+  },
+  "GO-2026-6612": {
+   "level": "called",
+   "symbol": "http2.Framer.ReadFrameForHeader (http2/frame.go:533)",
+   "stack": [
+    "product-catalog.main (main.go:213)",
+    "product-catalog.main$4 (main.go:214)",
+    "grpc.Server.Serve (server.go:991)",
+    "grpc.Serve$3 (server.go:992)",
+    "grpc.Server.handleRawConn (server.go:1023)",
+    "grpc.handleRawConn$1 (server.go:1024)",
+    "grpc.Server.serveStreams (server.go:1090)",
+    "transport.http2Server.HandleStreams (internal/transport/http2_server.go:653)",
+    "transport.framer.readFrame (internal/transport/http_util.go:515)",
+    "http2.Framer.ReadFrameForHeader (http2/frame.go:533)"
+   ],
+   "ids": [
+    "GO-2026-6612",
+    "CVE-2026-78663"
+   ],
+   "fixed": "v0.60.0"
+  },
+  "GO-2026-6617": {
+   "level": "called",
+   "symbol": "http2.ConnectionError.Error (http2/errors.go:67)",
+   "stack": [
+    "product-catalog.main (main.go:168)",
+    "errors.joinError.Error (src/errors/join.go:49)",
+    "http2.ConnectionError.Error (http2/errors.go:67)"
+   ],
+   "ids": [
+    "GO-2026-6617",
+    "CVE-2026-97032"
+   ],
+   "fixed": "v0.60.0"
+  }
+ }
+}
