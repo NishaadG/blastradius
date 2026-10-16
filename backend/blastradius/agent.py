@@ -56,6 +56,30 @@ def call_tool(tenant: str, name: str, args: dict, sid: str = DEFAULT_SID):
     return {"error": f"unknown tool {name}"}, None
 
 
+def _summarize(res: dict) -> str:
+    """One line describing a tool result, for the visible reasoning trace."""
+    if "error" in res:
+        return f"error: {res['error'][:90]}"
+    if "verdict" in res:
+        return f"{res['verdict']}{' ' + res['priority'] if res.get('priority') else ''}: {len(res.get('services', []))} service(s)"
+    if "top" in res:
+        return f"{len(res['top'])} advisories ranked; P0={res['summary'].get('P0', 0)}"
+    if "upstream_callers" in res:
+        return f"{len(res['upstream_callers'])} upstream caller(s); internet reachable: {res['internet_reachable']}"
+    if "owners" in res and "recent_decisions" not in res:
+        return ", ".join(o["owner"] for o in res["owners"]) or "no owner on record"
+    if "recent_decisions" in res:
+        return f"{len(res['owners'])} owner(s), {len(res['experts'])} expert(s), {len(res['recent_decisions'])} decision(s)"
+    return str(res)[:90]
+
+
+def _timed_call(tenant, name, args, sid):
+    import time
+    t0 = time.perf_counter()
+    res, full = call_tool(tenant, name, args, sid)
+    return res, full, {"tool": name, "args": args, "ms": round((time.perf_counter() - t0) * 1000, 1), "summary": _summarize(res)}
+
+
 def _service_names(tenant):
     g, _ = q.service_graph(tenant)
     return [n["id"] for n in g["nodes"]]
@@ -69,8 +93,8 @@ def _offline(tenant, question, sid):
     svc = next((s for s in sorted(_service_names(tenant), key=len, reverse=True) if s.lower() in low), None)
     if m:
         ident = m.group(1).upper()
-        res, full = call_tool(tenant, "triage_advisory", {"identifier": ident}, sid)
-        calls.append({"tool": "triage_advisory", "args": {"identifier": ident}})
+        res, full, c = _timed_call(tenant, "triage_advisory", {"identifier": ident}, sid)
+        calls.append(c)
         if "error" in res:
             return res["error"], calls, None
         ans = res["headline"]
@@ -81,16 +105,16 @@ def _offline(tenant, question, sid):
             ans += "\nPrecedent: " + "; ".join(f"{p['id']} ({p['decision']}: {p['rationale']})" for p in res["precedents"])
         return ans, calls, full
     if svc and re.search(r"\b(own|owner|owns|maintain|maintainer|who)\b", low):
-        res, _ = call_tool(tenant, "who_owns", {"service": svc}, sid)
-        calls.append({"tool": "who_owns", "args": {"service": svc}})
+        res, _, c = _timed_call(tenant, "who_owns", {"service": svc}, sid)
+        calls.append(c)
         return (f"{svc} is owned by " + (", ".join(o["owner"] for o in res.get("owners", [])) or "nobody (no CODEOWNERS entry)")), calls, None
     if svc and re.search(r"blast|radius|impact|depend|call|expos", low):
-        res, _ = call_tool(tenant, "blast_radius", {"service": svc}, sid)
-        calls.append({"tool": "blast_radius", "args": {"service": svc}})
+        res, _, c = _timed_call(tenant, "blast_radius", {"service": svc}, sid)
+        calls.append(c)
         return (f"{svc} is called by {', '.join(c['service'] for c in res.get('upstream_callers', [])) or 'nobody'}; "
                 + (f"exposed via {' -> '.join(res['exposure_path'])}." if res.get("exposure_path") else "not reachable from a known internet entry point.")), calls, None
-    res, _ = call_tool(tenant, "risk_board", {}, sid)
-    calls.append({"tool": "risk_board", "args": {}})
+    res, _, c = _timed_call(tenant, "risk_board", {}, sid)
+    calls.append(c)
     s = res["summary"]
     ans = f"{s['P0']} P0, {s['P1']} P1, {s['P2']} P2 advisories. Top: " + "; ".join(
         f"{a['cve'] or a['id']} [{a['priority']}] in {', '.join(a['services'])}" for a in res["top"][:3])
@@ -122,10 +146,13 @@ def _gemini(tenant, question, key, sid):
                 return "".join(p.get("text", "") for p in parts).strip(), calls, full
             contents.append({"role": "model", "parts": parts})
             resp_parts = []
-            for fc in fcs:
-                res, f = call_tool(tenant, fc["name"], fc.get("args", {}) or {}, sid)
+            thought = "".join(p.get("text", "") for p in parts if "text" in p).strip()
+            for k, fc in enumerate(fcs):
+                res, f, c = _timed_call(tenant, fc["name"], fc.get("args", {}) or {}, sid)
                 full = f or full
-                calls.append({"tool": fc["name"], "args": fc.get("args", {}) or {}})
+                if thought and k == 0:
+                    c["thought"] = thought[:240]  # what the model said before choosing the tool
+                calls.append(c)
                 resp_parts.append({"functionResponse": {"name": fc["name"], "response": {"result": res}}})
             contents.append({"role": "user", "parts": resp_parts})
     return "I could not finish within the tool budget.", calls, full

@@ -156,7 +156,8 @@ export type ServiceCard = {
   exposure_path: string[] | null;
   traces: Trace[];
 };
-export type AskResult = { answer: string; tool_calls: { tool: string; args: Record<string, unknown> }[]; triage: TriageResult | null; mode: string };
+export type ToolCall = { tool: string; args: Record<string, unknown>; ms?: number; summary?: string; thought?: string };
+export type AskResult = { answer: string; tool_calls: ToolCall[]; triage: TriageResult | null; mode: string };
 
 async function j<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`${API}${path}`, {

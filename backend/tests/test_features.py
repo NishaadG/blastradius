@@ -336,6 +336,8 @@ def test_gemini_tool_loop_calls_tools_and_feeds_results_back(monkeypatch):
     assert out["mode"] == "gemini" and out["answer"].startswith("paymentservice is owned")
     assert seen["key_header"] == "test-key"                      # key travels in a header, not the URL
     assert [c["tool"] for c in out["tool_calls"]] == ["who_owns", "blast_radius"]
+    assert out["tool_calls"][0]["args"] == {"service": "paymentservice"} and out["tool_calls"][0]["ms"] >= 0
+    assert out["tool_calls"][0]["summary"] and out["tool_calls"][1]["summary"].startswith("error")   # visible reasoning trace
     ok, bad = seen["responses"]
     assert ok["response"]["result"]["owners"]                    # real graph data reached the model
     assert "error" in bad["response"]["result"]                  # malformed argument rejected, not executed

@@ -387,9 +387,23 @@ export default function Home() {
                 ) : (
                   <>
                     <p className="serif whitespace-pre-wrap text-[17px] leading-snug">{answer?.answer}</p>
-                    <p className="mono mt-1.5 text-[10.5px] text-faint">
-                      {answer?.tool_calls.map((t) => t.tool).join(" · ")} · {answer?.mode === "gemini" ? "Gemini free tier" : "offline router, no LLM"}
-                    </p>
+                    <details className="mt-2" open={answer?.mode === "gemini"}>
+                      <summary className="mono cursor-pointer text-[10.5px] text-faint hover:text-ink">
+                        how this was answered · {answer?.tool_calls.length} tool call{answer?.tool_calls.length === 1 ? "" : "s"} ·{" "}
+                        {answer?.mode === "gemini" ? "Gemini chose the tools" : "offline router, no LLM"}
+                      </summary>
+                      <ol className="mt-1.5 border-l-2 border-rule-strong pl-3">
+                        {answer?.tool_calls.map((t, i) => (
+                          <li key={i} className="mono py-0.5 text-[11px] leading-snug">
+                            {t.thought && <div className="font-sans italic text-ink-2">&ldquo;{t.thought}&rdquo;</div>}
+                            <span className="font-semibold">{t.tool}</span>
+                            <span className="text-faint">({Object.values(t.args).map((v) => JSON.stringify(v)).join(", ")})</span>
+                            {t.summary && <span className="text-ink-2"> → {t.summary}</span>}
+                            {t.ms !== undefined && <span className="num text-faint"> · {t.ms} ms</span>}
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
                   </>
                 )}
               </div>
