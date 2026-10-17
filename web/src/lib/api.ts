@@ -157,7 +157,7 @@ export type ServiceCard = {
   traces: Trace[];
 };
 export type ToolCall = { tool: string; args: Record<string, unknown>; ms?: number; summary?: string; thought?: string };
-export type AskResult = { answer: string; tool_calls: ToolCall[]; triage: TriageResult | null; mode: string };
+export type AskResult = { answer: string; tool_calls: ToolCall[]; triage: TriageResult | null; mode: string; fallback_reason?: string | null };
 
 async function j<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(`${API}${path}`, {
@@ -192,6 +192,8 @@ export type EvalInfo = { available: boolean; passed?: number; total?: number };
 export const api = {
   config: () => j<AppConfig>("/api/config"),
   rescan: (t: string) => post<RescanResult>(`/api/${t}/rescan`, {}),
+  sbom: (t: string) => j<unknown>(`/api/${t}/sbom`),
+  startSbom: (sbom: string) => post<{ job: string }>("/api/sbom", { sbom }),
   vex: (t: string) => j<{ statements: unknown[] }>(`/api/${t}/vex`),
   bench: (t: string, agents: number) => j<BenchResult>(`/api/${t}/bench?agents=${agents}&seconds=4`),
   startIngest: (repo: string) => post<{ job: string }>("/api/ingest", { repo }),

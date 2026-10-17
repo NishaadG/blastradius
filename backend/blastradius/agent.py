@@ -8,8 +8,10 @@ Prompt-injection posture: tool results contain third-party text (advisory summar
 told to treat them as data, every tool is read-only and argument-validated, the tenant is fixed by the server, and
 there is no write tool, so injected text cannot change anything outside this response.
 """
+import collections
 import os
 import re
+import time
 
 import httpx
 
@@ -183,15 +185,40 @@ def _gemini(tenant, question, key, sid):
     return "I could not finish within the tool budget.", calls, full
 
 
+_budget = collections.deque()   # timestamps of recent model requests, shared by every visitor
+_cooldown_until = 0.0
+MODEL_BUDGET = int(os.getenv("BR_LLM_PER_MIN", "8"))  # stay under the free tier's per-minute limit
+
+
+def _llm_allowed() -> str | None:
+    """None when a model call may go ahead, else a short reason. Protects the shared free-tier quota."""
+    global _cooldown_until
+    now = time.monotonic()
+    if now < _cooldown_until:
+        return "model busy, retrying shortly"
+    while _budget and now - _budget[0] > 60:
+        _budget.popleft()
+    if len(_budget) >= MODEL_BUDGET:
+        return "model quota for this minute is used up"
+    _budget.append(now)
+    return None
+
+
 def ask(tenant: str, question: str, sid: str = DEFAULT_SID) -> dict:
+    global _cooldown_until
     key = os.getenv("GEMINI_API_KEY")
     mode, why = "offline-router", None
     try:
         if not key:
             raise RuntimeError("no key")
+        why = _llm_allowed()
+        if why:
+            raise RuntimeError(why)
         answer, calls, full = _gemini(tenant, question, key, sid)
-        mode = "gemini"
+        mode, why = "gemini", None
     except Exception as e:
-        why = None if not key else f"{type(e).__name__}: {str(e)[:120]}"
+        if key and why is None:
+            _cooldown_until = time.monotonic() + 45  # the model failed or is overloaded: skip it briefly
+            why = "model unavailable"
         answer, calls, full = _offline(tenant, question, sid)
-    return {"answer": answer, "tool_calls": calls, "triage": full, "mode": mode, "fallback_reason": why}
+    return {"answer": answer, "tool_calls": calls, "triage": full, "mode": mode, "fallback_reason": why if key else None}

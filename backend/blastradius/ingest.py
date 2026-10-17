@@ -33,10 +33,13 @@ def _rel(repo: str, path: str) -> str:
     return f"raw/{repo.replace('/', '__')}/{path.replace('/', '__')}"
 
 
+LOCAL_TEXT: dict[str, dict[str, str]] = {}  # pseudo-repo -> {path: text}, for uploaded documents such as an SBOM
 LOCAL_ROOT: dict[str, str] = {}  # pseudo-repo name -> checkout directory (CI mode reads the working tree, not GitHub)
 
 
 def fetch(repo: str, ref: str, path: str) -> str | None:
+    if repo in LOCAL_TEXT:
+        return LOCAL_TEXT[repo].get(path)
     if repo in LOCAL_ROOT:
         root = os.path.realpath(LOCAL_ROOT[repo])
         f = os.path.realpath(os.path.join(root, path))

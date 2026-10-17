@@ -2,7 +2,7 @@
 
 Ground truth is computed **without the graph** (raw lockfiles, cached OSV data, topology discovered from deployment files, CODEOWNERS) and compared with what the FalkorDB-backed product returns.
 
-**54/54 checks passed.**
+**57/57 checks passed.**
 
 | Group | Check | Result | Detail |
 |---|---|---|---|
@@ -18,6 +18,7 @@ Ground truth is computed **without the graph** (raw lockfiles, cached OSV data, 
 | otel/reachability | govulncheck findings stored with identical call-graph level (11 checked) | PASS | 0 mismatches |
 | otel/pr-reasoning | 37 decisions carry the reasoning and link of their PR exactly as extracted | PASS | 0 mismatches |
 | otel/pr-grounding | every package a decision is linked to appears in its PR or commit text (no invented subjects) | PASS | 0 ungrounded |
+| otel/sbom | CycloneDX export round-trips: 1576 packages and 2591 dependency edges identical, 8 advisories attached | PASS | 0 package diffs, 0 edge diffs |
 | otel/company-brain | expertise includes real human contributors, not only bots | PASS | 118 person-service links |
 | boutique/coverage | every OSV advisory for this tenant's packages is in the graph | PASS | 88 vs 88 |
 | boutique/affected-services | affected service set equals independent computation for 88 advisories | PASS | 0 mismatches |
@@ -31,6 +32,7 @@ Ground truth is computed **without the graph** (raw lockfiles, cached OSV data, 
 | boutique/reachability | govulncheck findings stored with identical call-graph level (30 checked) | PASS | 0 mismatches |
 | boutique/pr-reasoning | 12 decisions carry the reasoning and link of their PR exactly as extracted | PASS | 0 mismatches |
 | boutique/pr-grounding | every package a decision is linked to appears in its PR or commit text (no invented subjects) | PASS | 0 ungrounded |
+| boutique/sbom | CycloneDX export round-trips: 476 packages and 504 dependency edges identical, 88 advisories attached | PASS | 0 package diffs, 0 edge diffs |
 | boutique/company-brain | expertise includes real human contributors, not only bots | PASS | 50 person-service links |
 | anthos/coverage | every OSV advisory for this tenant's packages is in the graph | PASS | 19 vs 19 |
 | anthos/affected-services | affected service set equals independent computation for 19 advisories | PASS | 0 mismatches |
@@ -44,6 +46,7 @@ Ground truth is computed **without the graph** (raw lockfiles, cached OSV data, 
 | anthos/reachability | govulncheck findings stored with identical call-graph level (0 checked) | PASS | 0 mismatches |
 | anthos/pr-reasoning | 8 decisions carry the reasoning and link of their PR exactly as extracted | PASS | 0 mismatches |
 | anthos/pr-grounding | every package a decision is linked to appears in its PR or commit text (no invented subjects) | PASS | 0 ungrounded |
+| anthos/sbom | CycloneDX export round-trips: 136 packages and 194 dependency edges identical, 19 advisories attached | PASS | 0 package diffs, 0 edge diffs |
 | anthos/company-brain | expertise includes real human contributors, not only bots | PASS | 26 person-service links |
 | scenario | Log4Shell (Maven) is NOT_AFFECTED by proof of absence | PASS |  |
 | scenario | protobufjs advisory with a fixed version in use is NOT_AFFECTED (version outside range) | PASS | CVE-2023-36665 targets protobufjs, but you run 6.11.4, 7.6.5, 7.6.6, 7.5.9: outside the affected range. |

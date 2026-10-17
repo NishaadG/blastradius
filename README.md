@@ -106,9 +106,9 @@ All in [`queries.py`](backend/blastradius/queries.py) and [`memory.py`](backend/
 | Ownership, expertise, decisions | `OWNS`, `COMMITTED`, `Decision-[:DOCUMENTED_IN]->Commit` with `SUPERSEDES` for staleness |
 
 ## Does it work? [EVALS.md](EVALS.md) · [BENCH.md](BENCH.md)
-- `python -m evals.run` recomputes ground truth **without the graph** and compares it with the product: affected-service sets and verdicts for every advisory, that every returned path is a real chain of lockfile edges, exposure distances over the discovered topology, ownership, transitive callers, memory reuse, tenant **and session** isolation, and guardrails. Currently **54/54**, including that every govulncheck finding is stored in the graph with the identical call-graph level.
+- `python -m evals.run` recomputes ground truth **without the graph** and compares it with the product: affected-service sets and verdicts for every advisory, that every returned path is a real chain of lockfile edges, exposure distances over the discovered topology, ownership, transitive callers, memory reuse, tenant **and session** isolation, and guardrails. Currently **57/57**, including that every govulncheck finding is stored in the graph with the identical call-graph level.
 - **Discovery is cross-checked** against the hand-written call lists from the projects' docs: 100% recall on OpenTelemetry (plus 7 calls only the deployment files reveal), 100% on Bank of Anthos (Kubernetes env resolved through ConfigMaps, including `jdbc:` URLs) and 94% on Online Boutique. The one edge it misses (`shoppingassistantservice → productcatalogservice`) is in no deployment file; EVALS.md reports it rather than hiding it.
-- `pytest backend/tests`: **38 tests**: parsers, discovery, MCP over stdio, the LLM loop against a mock model, repo analysis (network mocked, including a Log4Shell found only through a transitive dependency), validation, rate limiting, session isolation and backpressure.
+- `pytest backend/tests`: **42 tests**: parsers, discovery, MCP over stdio, the LLM loop against a mock model, repo analysis (network mocked, including a Log4Shell found only through a transitive dependency), validation, rate limiting, session isolation and backpressure.
 - [BENCH.md](BENCH.md): 10/50/100 concurrent agents on shared memory. Reads stay fast; writes queue (FalkorDB serialises them); the client retries on backpressure and counts every retry.
 
 ## Security model (public deployment)
@@ -157,6 +157,10 @@ tools/                 Playwright helpers, outsider probe
 ## The reasoning behind decisions (PR discussions)
 
 Commits say *what* changed; the pull request says *why*. At build time `discussions.py` reads the PR (title, description, comments) behind each dependency-manifest commit from the public GitHub API and asks Gemini for a structured decision: what was decided, the stated reason, the packages concerned. Output is committed in `backend/snapshot/discussions/`, so a deploy needs no key. The model only extracts: a package it names is linked only if it literally appears in the PR or commit text, an empty rationale stays empty, and every decision links to its PR. Two evals check that the graph holds exactly the extracted text and that no invented subject was linked. Ask "why did we upgrade golang.org/x/net?" and the agent calls `why_decision` and cites the PR.
+
+## SBOM in, SBOM out
+
+Upload a CycloneDX or SPDX JSON file (Analyse a repo panel, `POST /api/sbom`, or `python -m blastradius.ci --sbom bom.json`) and it becomes a tenant graph: packages from each component's purl, dependency edges from `dependencies` / `relationships`. The Memory view exports any tenant as CycloneDX 1.5 with the advisories that apply (`GET /api/{tenant}/sbom`). An eval round-trips every curated tenant (export, parse back) and requires identical packages and dependency edges.
 
 ## CI gate and scheduled watcher
 

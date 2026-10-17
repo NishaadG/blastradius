@@ -55,7 +55,7 @@ if _cors:
 async def guard(request: Request, call_next):
     path = request.url.path
     if path.startswith(("/api", "/mcp")):
-        if int(request.headers.get("content-length") or 0) > 20_000:
+        if int(request.headers.get("content-length") or 0) > (3_200_000 if path == "/api/sbom" else 20_000):
             return JSONResponse(status_code=413, content={"detail": "request too large"})
         who = security.client_ip(request)
         cls = "heavy" if path.startswith("/mcp") else security.classify(request.method, path)
@@ -257,6 +257,33 @@ def start_ingest(body: IngestIn):
         raise HTTPException(422, str(e))
     except jobs.Busy as e:
         raise HTTPException(409, str(e))
+
+
+class SbomIn(BaseModel):
+    sbom: str = Field(min_length=20, max_length=3_100_000)
+
+
+@app.post("/api/sbom")
+def start_sbom(body: SbomIn):
+    """Analyse an uploaded CycloneDX/SPDX JSON document as its own tenant (same job pipeline as a repository)."""
+    from . import sbom as sbommod
+
+    try:
+        sbommod.parse_sbom(body.sbom)  # fail fast with a readable message, before queueing
+        return {"job": jobs.start("sbom", sbom=body.sbom)}
+    except sbommod.SbomError as e:
+        raise HTTPException(422, str(e))
+    except jobs.Busy as e:
+        raise HTTPException(409, str(e))
+
+
+@app.get("/api/{tenant}/sbom")
+def export_sbom(tenant: str = Depends(tenant_dep)):
+    """The tenant's packages, dependency edges and applicable advisories as CycloneDX 1.5."""
+    from . import sbom as sbommod
+
+    return JSONResponse(sbommod.export_cyclonedx(tenant),
+                        headers={"Content-Disposition": f'attachment; filename="{tenant}.cdx.json"'})
 
 
 @app.get("/api/ingest/{job_id}")

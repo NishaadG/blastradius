@@ -2,6 +2,7 @@
 
     python -m blastradius.ci --path . --fail-on P0 --sarif blastradius.sarif
     python -m blastradius.ci --path . --baseline ../base-checkout     # only findings the change introduces
+    python -m blastradius.ci --sbom bom.cdx.json                      # a CycloneDX/SPDX file instead of a checkout
 
 Same pipeline as the web app (manifests -> FalkorDB graph -> OSV -> deterministic judge), read from the local working
 tree. Exposure is unknown in this mode, so serious advisories on production dependencies are ranked as exposed.
@@ -51,6 +52,18 @@ def analyse(path: str, tenant: str, say=print) -> tuple[dict, list[dict]]:
     return triage.risk_board(tenant), services
 
 
+def analyse_sbom(file: str, say=print):
+    """Same gate for a CycloneDX/SPDX file instead of a checkout. The file is the SARIF location."""
+    from . import sbom
+
+    with open(file, encoding="utf-8") as f:
+        text = f.read()
+    tenant = sbom.ingest_sbom(text, say)
+    name = sbom.app_name(text)
+    d, base = os.path.split(file)
+    return triage.risk_board(tenant), [{"name": name, "path": d.replace("\\", "/"), "file": base}]
+
+
 def sarif(items: list[dict], services: list[dict]) -> dict:
     by_name = {s["name"]: s for s in services}
     rules, results = {}, []
@@ -75,6 +88,7 @@ def sarif(items: list[dict], services: list[dict]) -> dict:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="blastradius.ci")
     ap.add_argument("--path", default=".")
+    ap.add_argument("--sbom", help="analyse this CycloneDX/SPDX JSON file instead of --path")
     ap.add_argument("--baseline", help="checkout of the base branch; only advisories absent there can fail the build")
     ap.add_argument("--fail-on", default="P0", choices=["P0", "P1", "P2", "never"])
     ap.add_argument("--sarif")
@@ -83,7 +97,7 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     log = lambda m: print(m, file=sys.stderr)
 
-    board, services = analyse(a.path, "ci-head", log)
+    board, services = analyse_sbom(a.sbom, log) if a.sbom else analyse(a.path, "ci-head", log)
     items = [x for x in board["advisories"] if x["priority"] != "DEV"]
     known = set()
     if a.baseline:

@@ -188,6 +188,27 @@ export function MemoryView({ tenant, brain, onReset }: { tenant: string; brain: 
         {brain.cases.length === 0 && <span className="ml-3 text-[11.5px] text-faint">approve a decision first</span>}
       </section>
 
+      <section className="mt-6 border-t border-rule pt-4">
+        <Label>Export · CycloneDX SBOM</Label>
+        <p className="mb-3 text-[12px] leading-snug text-ink-2">
+          This graph&apos;s packages, dependency edges and the advisories that apply, as a CycloneDX 1.5 document any scanner can read.
+        </p>
+        <button
+          className="btn"
+          onClick={async () => {
+            const doc = await api.sbom(tenant);
+            const url = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" }));
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${tenant}.cdx.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+        >
+          Download SBOM
+        </button>
+      </section>
+
       <Bench tenant={tenant} />
 
       <button onClick={onReset} className="btn btn-quiet my-5 self-start">Reset my memory</button>

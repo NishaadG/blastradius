@@ -392,7 +392,7 @@ export default function Home() {
                     <details className="mt-2" open={answer?.mode === "gemini"}>
                       <summary className="mono cursor-pointer text-[10.5px] text-faint hover:text-ink">
                         how this was answered · {answer?.tool_calls.length} tool call{answer?.tool_calls.length === 1 ? "" : "s"} ·{" "}
-                        {answer?.mode === "gemini" ? "Gemini chose the tools" : "offline router, no LLM"}
+                        {answer?.mode === "gemini" ? "Gemini chose the tools" : answer?.fallback_reason ? `deterministic router (${answer.fallback_reason})` : "offline router, no LLM"}
                       </summary>
                       <ol className="mt-1.5 border-l-2 border-rule-strong pl-3">
                         {answer?.tool_calls.map((t, i) => (

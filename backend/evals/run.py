@@ -176,6 +176,17 @@ def eval_tenant(tenant):
     check(f"{tenant}/pr-reasoning", f"{n_ext} decisions carry the reasoning and link of their PR exactly as extracted", n_ext > 0 and bad_store == 0, f"{bad_store} mismatches")
     check(f"{tenant}/pr-grounding", "every package a decision is linked to appears in its PR or commit text (no invented subjects)", ungrounded == 0, f"{ungrounded} ungrounded")
 
+    # SBOM round trip: exporting the graph as CycloneDX and parsing it back yields the same packages and dependency edges
+    import json as _jj
+    from blastradius import sbom as _sb
+    doc = _sb.export_cyclonedx(tenant)
+    pk2, ed2 = _sb.parse_sbom(_jj.dumps(doc))
+    graph_pk = {r[0] for r in db.read(tenant, "MATCH (p:Package) RETURN p.key").result_set}
+    graph_ed = {(r[0], r[1]) for r in db.read(tenant, "MATCH (a:Package)-[:DEPENDS_ON]->(b:Package) RETURN a.key, b.key").result_set}
+    back_ed = {(a, b) for a, b, _ in ed2 if a is not None}
+    check(f"{tenant}/sbom", f"CycloneDX export round-trips: {len(graph_pk)} packages and {len(graph_ed)} dependency edges identical, {len(doc['vulnerabilities'])} advisories attached",
+          set(pk2) == graph_pk and back_ed == graph_ed, f"{len(set(pk2) ^ graph_pk)} package diffs, {len(back_ed ^ graph_ed)} edge diffs")
+
     humans = sum(1 for s in all_svcs for e in q.experts(tenant, s)[0] if e["kind"] == "person")
     check(f"{tenant}/company-brain", "expertise includes real human contributors, not only bots", humans > 0, f"{humans} person-service links")
 

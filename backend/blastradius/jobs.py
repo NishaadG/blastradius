@@ -34,7 +34,7 @@ def _evict_if_needed(keep: str):
             log.exception("eviction failed for %s", old)
 
 
-def _run(job_id: str, repo: str):
+def _run(job_id: str, repo: str, sbom: str | None = None):
     job = _jobs[job_id]
     t0 = time.monotonic()
 
@@ -44,10 +44,16 @@ def _run(job_id: str, repo: str):
         job["log"].append(msg)
 
     try:
-        _evict_if_needed(ingest.tenant_id_for(repo))
-        tenant = ingest.ingest_repo(repo, say)
+        if sbom is not None:
+            from . import sbom as sbommod
+
+            _evict_if_needed(sbommod.tenant_id_for_sbom(sbom))
+            tenant = sbommod.ingest_sbom(sbom, say)
+        else:
+            _evict_if_needed(ingest.tenant_id_for(repo))
+            tenant = ingest.ingest_repo(repo, say)
         job.update(status="done", tenant=tenant)
-    except ingest.IngestError as e:
+    except (ingest.IngestError, ValueError) as e:  # ValueError covers SbomError
         job.update(status="error", error=str(e))
     except Exception:
         log.exception("ingest failed for %s", repo)
@@ -57,8 +63,8 @@ def _run(job_id: str, repo: str):
         _busy.release()
 
 
-def start(repo: str) -> str:
-    if not ingest.REPO_RE.match(repo):
+def start(repo: str, sbom: str | None = None) -> str:
+    if sbom is None and not ingest.REPO_RE.match(repo):
         raise ingest.IngestError("Use the form owner/name, for example open-telemetry/opentelemetry-demo.")
     if not _busy.acquire(blocking=False):
         raise Busy("Another repository is being analysed right now. Try again in a minute.")
@@ -68,7 +74,7 @@ def start(repo: str) -> str:
                          "started": time.time()}
         for old in sorted(_jobs, key=lambda k: _jobs[k]["started"])[:-50]:
             _jobs.pop(old, None)
-    threading.Thread(target=_run, args=(job_id, repo), daemon=True).start()
+    threading.Thread(target=_run, args=(job_id, repo, sbom), daemon=True).start()
     return job_id
 
 

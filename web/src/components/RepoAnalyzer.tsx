@@ -28,6 +28,23 @@ export default function RepoAnalyzer({ onDone }: { onDone: (tenant: string) => v
     }, 1200);
   }
 
+  async function uploadSbom(file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    setJob(null);
+    setStarting(true);
+    try {
+      if (file.size > 3_000_000) throw new Error("SBOM is larger than 3 MB; run Blastradius locally for files this size.");
+      const { job: id } = await api.startSbom(await file.text());
+      setJob({ id, repo: file.name, status: "running", log: [], tenant: null, error: null });
+      poll(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStarting(false);
+    }
+  }
+
   async function start(e: React.FormEvent) {
     e.preventDefault();
     const value = repo.trim().replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "").replace(/\/$/, "");
@@ -62,6 +79,17 @@ export default function RepoAnalyzer({ onDone }: { onDone: (tenant: string) => v
           {running ? "Analysing…" : "Analyse"}
         </button>
       </form>
+      <label className="mt-3 block text-[12px] text-ink-2">
+        or upload an SBOM (CycloneDX or SPDX JSON){" "}
+        <input
+          type="file"
+          accept=".json,application/json"
+          disabled={starting || running}
+          onChange={(e) => { uploadSbom(e.target.files?.[0]); e.target.value = ""; }}
+          aria-label="Upload an SBOM"
+          className="mono ml-1 text-[11.5px] file:mr-2 file:cursor-pointer file:border file:border-rule-strong file:bg-transparent file:px-2 file:py-0.5 file:text-ink"
+        />
+      </label>
 
       {(job || error) && (
         <div className="mt-3 border-l-2 border-rule-strong pl-3">

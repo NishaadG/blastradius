@@ -424,3 +424,58 @@ def test_why_decision_returns_reasoning_with_link_and_tolerates_bad_service():
     assert why and why[0]["discussion"].startswith("https://github.com/GoogleCloudPlatform/microservices-demo/pull/")
     with pytest.raises(toolkit.ToolError):
         toolkit.why_decision("boutique", "x; DROP", "")
+
+
+def test_llm_budget_and_cooldown_fall_back_to_router(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setattr(agent, "MODEL_BUDGET", 1)
+    agent._budget.clear()
+    agent._cooldown_until = 0.0
+    calls = []
+
+    def boom(*a, **k):
+        calls.append(1)
+        raise RuntimeError("503")
+
+    monkeypatch.setattr(agent, "_gemini", boom)
+    monkeypatch.setattr(agent, "_offline", lambda *a: ("offline answer", [], None))
+    r1 = agent.ask("boutique", "hello")
+    assert r1["mode"] == "offline-router" and r1["fallback_reason"] == "model unavailable"
+    r2 = agent.ask("boutique", "again")  # inside the cooldown: the model is not even called
+    assert len(calls) == 1 and r2["fallback_reason"] == "model busy, retrying shortly"
+    agent._budget.clear()
+    agent._cooldown_until = 0.0
+
+
+# ------------------------------------------------------------------ SBOM
+def test_purl_parsing_across_ecosystems():
+    from blastradius.sbom import parse_purl
+    assert parse_purl("pkg:npm/%40scope/pkg@1.2.3") == ("npm", "@scope/pkg", "1.2.3")
+    assert parse_purl("pkg:pypi/Flask_Login@0.6.3") == ("PyPI", "flask-login", "0.6.3")
+    assert parse_purl("pkg:golang/golang.org/x/net@v0.38.0") == ("Go", "golang.org/x/net", "0.38.0")
+    assert parse_purl("pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1?type=jar") == ("Maven", "org.apache.logging.log4j:log4j-core", "2.14.1")
+    assert parse_purl("pkg:deb/debian/curl@7.0") is None and parse_purl("garbage") is None
+
+
+def test_cyclonedx_graph_keeps_transitive_edges_and_spdx_works():
+    from blastradius.sbom import SbomError, parse_sbom
+    bom = {"bomFormat": "CycloneDX", "metadata": {"component": {"name": "app", "bom-ref": "app"}},
+           "components": [{"bom-ref": "a", "purl": "pkg:npm/a@1.0.0"}, {"bom-ref": "b", "purl": "pkg:npm/b@2.0.0"},
+                          {"bom-ref": "c", "purl": "pkg:npm/c@3.0.0", "scope": "excluded"}],
+           "dependencies": [{"ref": "app", "dependsOn": ["a"]}, {"ref": "a", "dependsOn": ["b"]}]}
+    pkgs, edges = parse_sbom(json.dumps(bom))
+    assert (None, "npm:a@1.0.0", False) in edges and ("npm:a@1.0.0", "npm:b@2.0.0", False) in edges
+    assert (None, "npm:b@2.0.0", False) not in edges  # b is only reachable through a
+    spdx = {"spdxVersion": "SPDX-2.3", "name": "x", "packages": [
+        {"SPDXID": "SPDXRef-p", "externalRefs": [{"referenceType": "purl", "referenceLocator": "pkg:pypi/django@2.2.0"}]}],
+        "relationships": []}
+    assert "PyPI:django@2.2.0" in parse_sbom(json.dumps(spdx))[0]
+    for bad in ("not json", json.dumps({"hello": 1}), json.dumps({"bomFormat": "CycloneDX", "components": []})):
+        with pytest.raises(SbomError):
+            parse_sbom(bad)
+
+
+def test_sbom_endpoint_validates_and_rejects_garbage():
+    c = TestClient(app)
+    assert c.post("/api/sbom", json={"sbom": "x" * 30}).status_code == 422
+    assert c.post("/api/sbom", json={"sbom": json.dumps({"hello": "world", "pad": "y" * 30})}).status_code == 422

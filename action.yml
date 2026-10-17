@@ -3,6 +3,7 @@ description: Graph-based supply-chain triage. Fails the build when a change intr
 inputs:
   fail-on: {description: "Lowest priority that fails the build: P0, P1, P2 or never", default: "P0"}
   path: {description: "Directory to analyse", default: "."}
+  sbom: {description: "CycloneDX or SPDX JSON file to analyse instead of a checkout", default: ""}
   baseline: {description: "Checkout of the base branch; only findings absent there can fail the build", default: ""}
   sarif: {description: "SARIF output file", default: "blastradius.sarif"}
 runs:
@@ -26,4 +27,5 @@ runs:
       run: |
         ARGS=(--path "$GITHUB_WORKSPACE/${{ inputs.path }}" --fail-on "${{ inputs.fail-on }}" --sarif "$GITHUB_WORKSPACE/${{ inputs.sarif }}" --summary "$GITHUB_STEP_SUMMARY")
         if [ -n "${{ inputs.baseline }}" ]; then ARGS+=(--baseline "$GITHUB_WORKSPACE/${{ inputs.baseline }}"); fi
+        if [ -n "${{ inputs.sbom }}" ]; then ARGS+=(--sbom "$GITHUB_WORKSPACE/${{ inputs.sbom }}"); fi
         python -m blastradius.ci "${ARGS[@]}"

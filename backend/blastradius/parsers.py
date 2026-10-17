@@ -258,7 +258,14 @@ def parse_gradle(text: str):
     return pkgs, edges
 
 
+def _parse_sbom(text: str):
+    from .sbom import parse_sbom
+
+    return parse_sbom(text)
+
+
 PARSERS = {
+    "sbom": _parse_sbom,
     "npm": parse_npm_lock, "gomod": parse_go_mod, "requirements": parse_requirements,
     "uv": parse_uv_lock, "maven": parse_pom, "cargo": parse_cargo_lock, "gradle": parse_gradle,
 }
