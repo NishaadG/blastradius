@@ -22,7 +22,7 @@ ok("unknown tenant 404", r.status === 404);
 ({ r } = await j("/api/boutique/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: "x".repeat(70000) }));
 ok("oversized body rejected", r.status === 413);
 ({ r } = await j("/api/sbom", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sbom: JSON.stringify({ hello: "world", pad: "y".repeat(30) }) }) }));
-ok("SBOM endpoint rejects a non-SBOM document", r.status === 422);
+ok("SBOM endpoint rejects a non-SBOM document (422, or 429 once the ingest quota is used)", r.status === 422 || r.status === 429);
 const cors = await fetch(base + "/api/tenants", { headers: { Origin: "https://evil.example" } });
 ok("no cross-origin access granted", !cors.headers.get("access-control-allow-origin"));
 ({ r, b } = await j("/api/boutique/reset-memory", { method: "POST", headers: { "Content-Type": "application/json", "X-Session": "probe-session-0001" }, body: "{}" }));
