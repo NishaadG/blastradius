@@ -37,8 +37,10 @@ Each tenant gets its **own FalkorDB graph**, so isolation is structural rather t
 ## A company brain with receipts
 Ownership comes from `CODEOWNERS`, expertise from commit history, and dependency decisions link to the exact commit that made them. A `SUPERSEDES` edge marks decisions that were later overtaken, so the answer to "why do we pin this?" says whether the reasoning is still current.
 
+Commits say what changed, not why, so a build step also reads the pull request behind each dependency change and has Gemini extract the decision and the stated reason. The model is boxed in: it may only restate what the PR says, an empty rationale stays empty, and a package is linked to a decision only if its name literally appears in the PR or commit text. Two evals enforce this, and the second one caught the model inventing a subject (`otlp-exporters`, a paraphrase, not a package) on the first run. Now "why did we upgrade golang.org/x/net?" is answered with the CVEs and the PR links.
+
 ## The topology is discovered, not typed in
-Early on I hand-wrote which service calls which. That's the weakest part of any demo, so I replaced it: Blastradius now reads the project's own deployment files. In Online Boutique's Kubernetes manifests, `PRODUCT_CATALOG_SERVICE_ADDR=productcatalogservice:3550` is a call and a `LoadBalancer` Service is an internet exposure. In the OpenTelemetry demo's Compose file, bare env names resolve through `.env`, and only a real `host:container` port mapping counts as exposure. Checked against my old hand-written list, discovery recovered 100% of the OpenTelemetry edges (and found 7 the docs never mention) and 94% of Boutique's; the one it misses is in no deployment file at all, and the eval report says so.
+Early on I hand-wrote which service calls which. That's the weakest part of any demo, so I replaced it: Blastradius now reads the project's own deployment files. In Online Boutique's Kubernetes manifests, `PRODUCT_CATALOG_SERVICE_ADDR=productcatalogservice:3550` is a call and a `LoadBalancer` Service is an internet exposure. In the OpenTelemetry demo's Compose file, bare env names resolve through `.env`, and only a real `host:container` port mapping counts as exposure. Checked against my old hand-written list, discovery recovered 100% of the OpenTelemetry edges (and found 7 the docs never mention), 100% of Bank of Anthos's (whose addresses hide inside ConfigMaps and `jdbc:` URLs) and 94% of Boutique's; the one it misses is in no deployment file at all, and the eval report says so.
 
 ## Any public repo, including the paths manifests hide
 Paste `owner/name` and Blastradius finds the manifests, asks [deps.dev](https://deps.dev) for the resolved dependency tree when a manifest lists only direct dependencies, and builds a tenant graph. Pointed at a deliberately vulnerable Java app, it finds Log4Shell as `app → spring-boot-starter-log4j2 → log4j-core@2.14.1`. The build file never mentions log4j-core; a static parser sees nothing. A graph of resolved dependencies sees the whole chain.
@@ -47,7 +49,7 @@ Paste `owner/name` and Blastradius finds the manifests, asks [deps.dev](https://
 The same toolkit is exposed as an MCP server, so Claude Desktop, Claude Code or any MCP client can ask the graph directly, and as a tool-calling loop for the chat box. The model can only call validated, read-only tools; it never sees Cypher.
 
 ## How do we know it's right?
-Ground truth is computed *without* the graph from the raw lockfiles, cached OSV data, the discovered topology and `CODEOWNERS`, then compared to the product: affected-service sets and verdicts for all 96 advisories, that every returned path is a real chain of lockfile edges, exposure distances, ownership, transitive callers, memory reuse, and tenant and session isolation. 35 of 35 pass, plus 30 unit tests and guardrail checks (write queries are rejected on the agent path).
+Ground truth is computed *without* the graph from the raw lockfiles, cached OSV data, the discovered topology and `CODEOWNERS`, then compared to the product: affected-service sets and verdicts for every advisory in three real projects, that every returned path is a real chain of lockfile edges, exposure distances, ownership, transitive callers, memory reuse, and tenant and session isolation. 54 of 54 pass, plus 38 unit tests and guardrail checks (write queries are rejected on the agent path).
 
 ## Under load, honestly
 Track 2 mentions high-concurrency shared state, so I benchmarked it: 10, 50 and 100 agents hammering one graph. Reads stay fast; FalkorDB serialises writes, so write latency queues. At 100 agents my first run saw about 2% of operations rejected with `Max pending queries exceeded`. That's FalkorDB protecting itself, so the client now retries with jittered backoff and counts every retry in the results instead of hiding them.
@@ -55,7 +57,13 @@ Track 2 mentions high-concurrency shared state, so I benchmarked it: 10, 50 and 
 ## The "is the graph decoration?" test
 Stop the FalkorDB container. The UI turns red and nothing answers: no cache, no fallback, by design. Start it, and everything resumes. If removing the database leaves the product working, the database was decoration. Here, it is the product.
 
+## Reachable, not just present
+For Go services, Blastradius runs Google's `govulncheck` and stores the call-graph result on the edge between service and advisory. A P0 whose vulnerable function is never called is demoted with the reason; one that is called shows the actual stack, from `main` down to the vulnerable function.
+
+## It notices, and it blocks
+A watcher re-queries OSV on a schedule and flags advisories published since the graph was built. A CLI and GitHub Action analyse a checkout, write SARIF and fail a pull request only for findings that change *introduces* compared to the base branch.
+
 ## What's next
-Function-level reachability, SBOM import, and building the `CALLS` edges from OpenTelemetry traces instead of curating them.
+Function-level reachability beyond Go, SBOM import, and building the `CALLS` edges from OpenTelemetry traces instead of reading them from deployment files.
 
 *Built with FalkorDB, Cypher, FastAPI, Next.js and Cytoscape. Everything runs locally for $0. Developed with Claude Code as a coding assistant (disclosed per the hackathon rules).*

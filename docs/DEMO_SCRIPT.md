@@ -10,14 +10,18 @@ Record at 1080p+. Run the app, open `http://localhost:3001`, and either click **
 | 0:55 | Click **Approve fix** → Memory tab | "A human approves. The decision is written back as memory: a case, linked to the advisory, the services, and the playbook." |
 | 1:10 | Triage `CVE-2026-48712` → precedent card | "A different protobufjs advisory arrives. A three-hop traversal finds the earlier case. The agent cites it and reuses the playbook." |
 | 1:35 | Triage `GHSA-jfh8-c2jp-5v3q` (Log4Shell) | "Log4Shell? Zero paths. In a graph, 'no path found' is proof, not a failure." |
-| 1:55 | Company tab → paymentservice | "The company brain: owners from CODEOWNERS, expertise from commits, and decisions traced to the source commit, with staleness marked." |
+| 1:55 | Company tab → frontend, the "why" lines | "The company brain: owners from CODEOWNERS, expertise from commits, and each dependency decision traced to its commit, with the reason read from the pull request behind it." |
 | 2:15 | Switch tenant → Memory empty | "Each tenant is its own FalkorDB graph. Memory can't leak across them." |
 | 2:30 | `docker stop` FalkorDB → red banner | "And the test that matters: stop FalkorDB and the product stops. The graph isn't decoration. It's the product." |
-| 2:42 | Title card: repo, EVALS 35/35, $0 | "Open source, runs locally for free, 35 of 35 correctness checks against an independent computation." |
+| 2:42 | Title card: repo, EVALS 54/54, $0 | "Open source, runs locally for free, 54 of 54 correctness checks against an independent computation." |
 
 ## Optional extra beats (if you have time to spare)
 | Beat | On screen | Voiceover |
 |---|---|---|
+| Real LLM | Ask "Why did we upgrade golang.org/x/net?", expand **how this was answered** | "The model picks tools; every fact comes from the graph. Here is each tool call, its arguments and timing, and the answer cites the pull requests." |
+| Reachability | Triage a Go advisory and open the call stack | "Present is not the same as reachable. govulncheck's call graph is stored on the edge: this one is called from main, that one never is, so it drops to P2." |
+| Watcher | Risk board → **rescan OSV** | "It re-checks OSV and flags advisories that appeared since the graph was built." |
+| CI | A PR that adds an old Django → failing check with SARIF | "A pull request that introduces a P0 fails, and only for what it introduces." |
 | Any repo | Header → **Analyse a repo** → `christophetd/log4shell-vulnerable-app` → triage `CVE-2021-44228` | "Paste any public repo. It resolves the transitive tree and finds Log4Shell through spring-boot-starter-log4j2, a path no manifest names." |
 | MCP | Claude Code or Claude Desktop asking "what is our riskiest vulnerability?" with the Blastradius MCP server connected | "The same graph is an MCP server, so any AI client can use it. Read-only on the public site." |
 | Under load | Memory tab → **50 agents** → results | "Fifty agents reading paths and writing memory to one graph at once: reads stay fast, writes queue, and every retry is counted." |
