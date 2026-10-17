@@ -207,8 +207,8 @@ export default function Home() {
       await say(6, "Log4Shell? Proven not affected: the traversal returns zero paths. The absence of a path is evidence.", 6000);
       setResult(null);
       setTab("company");
-      setSelected("paymentservice");
-      await say(7, "Company brain: owners, expertise and decisions, each traced to a source commit.", 5500);
+      setSelected("frontend");
+      await say(7, "Company brain: owners, expertise, and each dependency decision traced to its commit, with the reason read from the pull request discussion behind it.", 7500);
       setSelected(null);
       setTab("memory");
       switchTenant("otel");
@@ -237,10 +237,12 @@ export default function Home() {
     const top = (risk?.advisories ?? []).filter((a) => a.priority === "P0").slice(0, 3);
     return [
       ...top.map((a) => ({ label: `Critical ${a.packages[0]?.split("@")[0]} advisory`, q: a.cve ?? a.id })),
-      { label: "Log4Shell, in a stack with no Java", q: "GHSA-jfh8-c2jp-5v3q" },
-      { label: "Who owns paymentservice?", q: "who owns paymentservice?" },
+      ...(tenant === "anthos" ? [] : [{ label: "Log4Shell, in a stack with no Java", q: "GHSA-jfh8-c2jp-5v3q" }]),
+      tenant === "boutique"
+        ? { label: "Why did we upgrade golang.org/x/net?", q: "Why did we upgrade golang.org/x/net?" }
+        : { label: "Who owns frontend?", q: "who owns frontend?" },
     ];
-  }, [risk]);
+  }, [risk, tenant]);
 
   const curated = tenants.filter((t) => t.kind === "curated");
   const mine = tenants.filter((t) => t.kind === "byo");
