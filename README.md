@@ -13,9 +13,9 @@ Built for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB), enter
 
 | Track | What Blastradius does |
 |---|---|
-| 1 · Agents That Act on Connected Data | Multi-hop traversals (`service → package → … → vulnerable package`), blast radius over a service call graph **discovered from the project's own Kubernetes/Compose files**, PageRank, a deterministic judge, human-gated action proposals, an **MCP server** and an LLM tool loop. |
+| 1 · Agents That Act on Connected Data | Multi-hop traversals (`service → package → … → vulnerable package`), blast radius over a service call graph **discovered from the project's own Kubernetes/Compose files**, PageRank, **function-level reachability** (Go), a deterministic judge, human-gated action proposals, an **MCP server**, a Gemini tool loop with a visible trace, a **CI gate + SARIF**, **SBOM in/out** and a scheduled OSV watcher. |
 | 2 · Agent Memory & Coordination | Episodic cases, procedural playbooks with derived success counts, three agents handing off through graph state, **one graph per tenant** and **per-session memory isolation**, plus a [concurrency benchmark](BENCH.md). |
-| 3 · Company Brain | Ownership from CODEOWNERS, human expertise from commit history, dependency decisions **traced to the source commit**, `SUPERSEDES` edges marking stale knowledge. |
+| 3 · Company Brain | Ownership from CODEOWNERS, human expertise from commit history, dependency decisions **traced to the source commit and to the PR discussion that explains why** (Gemini extraction, checked by evals), `SUPERSEDES` edges marking stale knowledge. Three real projects: OpenTelemetry Demo, Online Boutique, Bank of Anthos. |
 
 ## Why a graph (and not a vector DB)
 *"Does this CVE reach production?"* is a path query: advisory → package → dependency chain → service → caller chain → internet-exposed entry point. A similarity search can't prove a path exists, and it can't prove one doesn't. In a graph **"no path found" is evidence**, which is how Blastradius proves Log4Shell does not affect a Node/Go/Python stack, and how it finds it in a Java one through a dependency the manifest never names.
@@ -28,11 +28,13 @@ Built for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB), enter
   { "mcpServers": { "blastradius": { "command": "<repo>/backend/.venv/Scripts/python.exe",
                                      "args": ["-m", "blastradius.mcp_server"], "cwd": "<repo>/backend" } } }
   ```
-  Tools: `list_tenants`, `risk_board`, `triage_advisory`, `blast_radius`, `who_owns`, `service_brain`, and `record_decision` (local only; it is not registered on a public server).
+  Tools: `list_tenants`, `risk_board`, `triage_advisory`, `blast_radius`, `who_owns`, `service_brain`, `why_decision`, and `record_decision` (local only; it is not registered on a public server).
 - **Chat.** A tool-calling loop on a free Gemini key (`GEMINI_API_KEY`); with no key a deterministic router answers the same tools, so everything works at $0.
 - **Know if the vulnerable function is actually called (Go).** For Go services, Blastradius brings in the official [`govulncheck`](https://go.dev/doc/security/vuln/) call-graph analysis: a vulnerable package is not a vulnerable *call*. The case file shows the real call stack (`shippingservice.main (main.go:99) → grpc.Server.Serve → … → http2.Framer.WriteContinuation`) or states that no call path exists, and a P0/P1 whose function is provably never called is demoted to P2 with the reason shown. Stored as `(Service)-[:REACHES {level, symbol, stack}]->(Advisory)`; the raw results are committed in the snapshot (`python -m blastradius.reach collect <tenant>` regenerates them in a Go container).
 - **Let it notice on its own.** **Rescan OSV** (or `python -m blastradius.watch --all` from cron) re-queries every package, finds advisories published since the graph was built, writes them into the graph marked *new*, and triages them with the same judge.
 - **Take the decision with you.** Approved decisions export as an **[OpenVEX](https://openvex.dev)** document (fixed / not affected with your rationale / risk accepted) from the Memory tab.
+- **Bring an SBOM, or take one.** Upload CycloneDX/SPDX JSON to analyse it, or export any tenant as CycloneDX 1.5 (see [SBOM in, SBOM out](#sbom-in-sbom-out)).
+- **Block risky pull requests.** A GitHub Action and CLI fail a PR only for what it introduces, with SARIF (see [CI gate](#ci-gate-and-scheduled-watcher)).
 - **Stress it.** The Memory tab runs 10/50/100 concurrent agents against shared graph memory.
 
 ## Run it locally ($0, no accounts, works offline)
@@ -44,7 +46,7 @@ docker compose up -d falkordb                      # FalkorDB (browser UI on :30
 cd backend
 python -m venv .venv && .venv/Scripts/activate     # or: source .venv/bin/activate
 pip install -r requirements.txt
-python -m blastradius.build                        # builds both tenant graphs from the committed snapshot (offline, under a minute)
+python -m blastradius.build                        # builds all three tenant graphs from the committed snapshot (offline, under a minute)
 uvicorn blastradius.api:app --port 8000
 
 cd ../web && npm install
