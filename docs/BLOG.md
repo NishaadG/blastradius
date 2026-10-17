@@ -2,6 +2,10 @@
 
 *Building Blastradius for Graph Hacks with FalkorDB*
 
+![Blastradius tracing a critical advisory through the dependency graph to an internet-facing service](https://raw.githubusercontent.com/NishaadG/blastradius/main/docs/img/triage.png)
+
+**Live demo:** https://13-203-50-195.sslip.io · **Code:** https://github.com/NishaadG/blastradius
+
 Every time a new CVE lands, someone asks the same four questions: **Are we affected? Through which dependency? Who owns that service? Did we already deal with something like this?** Most tools answer with a list. The honest answer is a *path*.
 
 ## The problem with "similar text"
@@ -49,7 +53,7 @@ Paste `owner/name` and Blastradius finds the manifests, asks [deps.dev](https://
 The same toolkit is exposed as an MCP server, so Claude Desktop, Claude Code or any MCP client can ask the graph directly, and as a tool-calling loop for the chat box. The model can only call validated, read-only tools; it never sees Cypher.
 
 ## How do we know it's right?
-Ground truth is computed *without* the graph from the raw lockfiles, cached OSV data, the discovered topology and `CODEOWNERS`, then compared to the product: affected-service sets and verdicts for every advisory in three real projects, that every returned path is a real chain of lockfile edges, exposure distances, ownership, transitive callers, memory reuse, and tenant and session isolation. 54 of 54 pass, plus 38 unit tests and guardrail checks (write queries are rejected on the agent path).
+Ground truth is computed *without* the graph from the raw lockfiles, cached OSV data, the discovered topology and `CODEOWNERS`, then compared to the product: affected-service sets and verdicts for every advisory in three real projects (the OpenTelemetry demo, Online Boutique and Bank of Anthos), that every returned path is a real chain of lockfile edges, exposure distances, ownership, transitive callers, memory reuse, and tenant and session isolation. 57 of 57 pass, plus 42 unit tests and guardrail checks (write queries are rejected on the agent path).
 
 ## Under load, honestly
 Track 2 mentions high-concurrency shared state, so I benchmarked it: 10, 50 and 100 agents hammering one graph. Reads stay fast; FalkorDB serialises writes, so write latency queues. At 100 agents my first run saw about 2% of operations rejected with `Max pending queries exceeded`. That's FalkorDB protecting itself, so the client now retries with jittered backoff and counts every retry in the results instead of hiding them.
@@ -63,7 +67,16 @@ For Go services, Blastradius runs Google's `govulncheck` and stores the call-gra
 ## It notices, and it blocks
 A watcher re-queries OSV on a schedule and flags advisories published since the graph was built. A CLI and GitHub Action analyse a checkout, write SARIF and fail a pull request only for findings that change *introduces* compared to the base branch.
 
+## SBOM in, SBOM out
+Not every team can point a tool at its source. So Blastradius also takes a CycloneDX or SPDX file: each component's purl becomes a `Package` node, the SBOM's dependency list becomes `DEPENDS_ON` edges, and from there it is the same graph and the same traversals. It goes the other way too: any tenant exports as CycloneDX 1.5 with the advisories that apply. The eval exports each of the three projects, re-imports the file, and checks that the packages and edges come back identical.
+
+## A free-tier model, shared with strangers
+The hosted demo runs on Gemini's free tier, and every visitor shares one quota. Instead of letting a busy minute turn into errors, the server budgets model calls across everyone and backs off for a short while after a failure. When the model is out, the same tools answer through a deterministic router, and the UI says which one answered and why. Because the verdicts never depended on the model, the answer to "are we affected?" is the same either way.
+
 ## What's next
-Function-level reachability beyond Go, SBOM import, and building the `CALLS` edges from OpenTelemetry traces instead of reading them from deployment files.
+Function-level reachability beyond Go, and building the `CALLS` edges from OpenTelemetry traces instead of reading them from deployment files.
+
+## Try it
+Open the [live demo](https://13-203-50-195.sslip.io) and take the guided tour, or paste a public `owner/name` repository. To run it yourself, it is `docker compose up` plus one build command, and it works offline from a committed snapshot. The README has the data model, every Cypher query the product depends on, and the eval report.
 
 *Built with FalkorDB, Cypher, FastAPI, Next.js and Cytoscape. Everything runs locally for $0. Developed with Claude Code as a coding assistant (disclosed per the hackathon rules).*

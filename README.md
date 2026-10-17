@@ -133,7 +133,7 @@ The hosted instance is a small shared server: public repos only, limits as above
 ```powershell
 aws login                                  # once
 ./deploy/aws/provision.ps1                 # EC2 t3.small, Ubuntu 24.04, Docker, Caddy HTTPS on <ip>.sslip.io (~10 min)
-node tools/probe.mjs https://<host>        # 14 outsider checks against the live site
+node tools/probe.mjs https://<host>        # 15 outsider checks against the live site
 ./deploy/aws/update.ps1                    # ship a new push
 ./deploy/aws/teardown.ps1                  # remove everything, stop all charges
 ```

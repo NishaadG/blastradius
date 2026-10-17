@@ -13,7 +13,7 @@ Record at 1080p+. Run the app, open `http://localhost:3001`, and either click **
 | 1:55 | Company tab → frontend, the "why" lines | "The company brain: owners from CODEOWNERS, expertise from commits, and each dependency decision traced to its commit, with the reason read from the pull request behind it." |
 | 2:15 | Switch tenant → Memory empty | "Each tenant is its own FalkorDB graph. Memory can't leak across them." |
 | 2:30 | `docker stop` FalkorDB → red banner | "And the test that matters: stop FalkorDB and the product stops. The graph isn't decoration. It's the product." |
-| 2:42 | Title card: repo, EVALS 54/54, $0 | "Open source, runs locally for free, 54 of 54 correctness checks against an independent computation." |
+| 2:42 | Title card: repo, EVALS 57/57, $0 | "Open source, runs locally for free, 57 of 57 correctness checks against an independent computation." |
 
 ## Optional extra beats (if you have time to spare)
 | Beat | On screen | Voiceover |
