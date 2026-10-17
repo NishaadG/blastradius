@@ -14,7 +14,7 @@ _ENV_KEY = re.compile(r"(_ADDR|_ADDRESS|_HOST|_URL|_ENDPOINT|_URI)$", re.I)
 
 def _host(value: str) -> str | None:
     v = str(value).strip().strip("'\"")
-    v = re.sub(r"^[a-z][a-z0-9+.-]*://", "", v)  # scheme
+    v = re.sub(r"^([a-z][a-z0-9+.-]*:)+//", "", v)  # scheme, incl. jdbc:postgresql://
     v = v.split("@")[-1].split("/")[0].split(":")[0]
     return v.lower() if re.fullmatch(r"[a-z][a-z0-9_-]*", v.lower()) else None
 
@@ -79,24 +79,32 @@ def compose(texts: list[str], names: set[str], dotenv: dict[str, str] | None = N
 
 
 def kubernetes(texts: list[str], names: set[str]):
+    """Calls come from container env (literal, or resolved through ConfigMaps: envFrom and configMapKeyRef)."""
+    docs = [d for t in texts for d in yaml.safe_load_all(t) if isinstance(d, dict)]
+    cms = {(d.get("metadata") or {}).get("name"): {str(k): str(v) for k, v in (d.get("data") or {}).items()}
+           for d in docs if d.get("kind") == "ConfigMap"}
     calls, exposed = set(), set()
-    for text in texts:
-        for doc in yaml.safe_load_all(text):
-            if not isinstance(doc, dict):
+    for doc in docs:
+        kind, meta, spec = doc.get("kind"), doc.get("metadata") or {}, doc.get("spec") or {}
+        if kind == "Deployment":
+            svc = meta.get("name")
+            if svc not in names:
                 continue
-            kind, meta, spec = doc.get("kind"), doc.get("metadata") or {}, doc.get("spec") or {}
-            if kind == "Deployment":
-                svc = meta.get("name")
-                if svc not in names:
-                    continue
-                for c in (((spec.get("template") or {}).get("spec") or {}).get("containers") or []):
-                    for k, v in _env_items(c.get("env")):
-                        if _ENV_KEY.search(k):
-                            h = _host(v)
-                            if h and h in names and h != svc:
-                                calls.add((svc, h))
-            elif kind == "Service" and spec.get("type") in ("LoadBalancer", "NodePort"):
-                target = (spec.get("selector") or {}).get("app")
-                if target in names:
-                    exposed.add(target)
+            for c in (((spec.get("template") or {}).get("spec") or {}).get("containers") or []):
+                items = list(_env_items(c.get("env")))
+                for ref in c.get("envFrom") or []:
+                    items += list(cms.get(((ref or {}).get("configMapRef") or {}).get("name"), {}).items())
+                for e in c.get("env") or []:
+                    kr = ((e.get("valueFrom") or {}).get("configMapKeyRef") or {}) if isinstance(e, dict) else {}
+                    if kr.get("key") in cms.get(kr.get("name"), {}):
+                        items.append((e["name"], cms[kr["name"]][kr["key"]]))
+                for k, v in items:
+                    if _ENV_KEY.search(k):
+                        h = _host(v)
+                        if h and h in names and h != svc:
+                            calls.add((svc, h))
+        elif kind == "Service" and spec.get("type") in ("LoadBalancer", "NodePort"):
+            target = (spec.get("selector") or {}).get("app")
+            if target in names:
+                exposed.add(target)
     return calls, exposed

@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Upgrade the cryptography package to version 50.0.0.", "rationale": "This update addresses CVE-2026-69247, which involves a Bleichenbacher oracle vulnerability in PKCS#7 EnvelopedData decryption.", "kind": "security-fix", "packages": ["cryptography"]}

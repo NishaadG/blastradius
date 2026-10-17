@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Upgrade pyasn1 to version 0.6.4.", "rationale": "This update addresses CVE-2026-59886, which causes uncontrolled resource consumption when converting decoded REAL values.", "kind": "security-fix", "packages": ["pyasn1"]}

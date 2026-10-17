@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Upgrade org.apache.logging.log4j:log4j-api to version 2.26.1.", "rationale": "This update addresses CVE-2026-49844, which involves improper encoding of non-finite floating-point values during MapMessage JSON serialization.", "kind": "security-fix", "packages": ["org.apache.logging.log4j:log4j-api"]}

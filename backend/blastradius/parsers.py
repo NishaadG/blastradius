@@ -106,6 +106,43 @@ def parse_requirements(text: str):
     return pkgs, edges
 
 
+def parse_uv_lock(text: str):
+    """uv.lock: a fully resolved Python dependency graph. The project's own entry (virtual/editable source) lists the direct
+    dependencies; every other [[package]] lists its own, so real transitive paths are available."""
+    import tomllib
+
+    data = tomllib.loads(text)
+    pkgs, edges, root_deps, dev = {}, [], [], set()
+    by_name = {}
+    for p in data.get("package", []):
+        src = p.get("source") or {}
+        by_name[p["name"]] = p
+        if "virtual" in src or "editable" in src:
+            root_deps = [d["name"] for d in p.get("dependencies", [])]
+            dev = {d["name"] for grp in (p.get("dev-dependencies") or {}).values() for d in grp}
+            root_deps += sorted(dev)
+        elif p.get("version"):
+            key = pkey(ECO_PYPI, p["name"], p["version"])
+            pkgs[key] = {"eco": ECO_PYPI, "name": p["name"], "version": p["version"], "dev": False}
+    for p in data.get("package", []):
+        src = p.get("source") or {}
+        if "virtual" in src or "editable" in src or not p.get("version"):
+            continue
+        a = pkey(ECO_PYPI, p["name"], p["version"])
+        for d in p.get("dependencies", []):
+            q = by_name.get(d["name"])
+            if q and q.get("version"):
+                edges.append((a, pkey(ECO_PYPI, q["name"], q["version"]), False))
+    for n in root_deps:
+        q = by_name.get(n)
+        if q and q.get("version"):
+            k = pkey(ECO_PYPI, q["name"], q["version"])
+            if n in dev:
+                pkgs[k]["dev"] = True
+            edges.append((None, k, n in dev))
+    return pkgs, edges
+
+
 ECO_MAVEN, ECO_CARGO = "Maven", "crates.io"
 
 
@@ -223,11 +260,11 @@ def parse_gradle(text: str):
 
 PARSERS = {
     "npm": parse_npm_lock, "gomod": parse_go_mod, "requirements": parse_requirements,
-    "maven": parse_pom, "cargo": parse_cargo_lock, "gradle": parse_gradle,
+    "uv": parse_uv_lock, "maven": parse_pom, "cargo": parse_cargo_lock, "gradle": parse_gradle,
 }
 
 # file name -> parser kind, used to discover services in an arbitrary repository
 LOCKFILES = {
     "package-lock.json": "npm", "go.mod": "gomod", "requirements.txt": "requirements",
-    "pom.xml": "maven", "Cargo.lock": "cargo", "build.gradle": "gradle", "build.gradle.kts": "gradle",
+    "pom.xml": "maven", "Cargo.lock": "cargo", "uv.lock": "uv", "build.gradle": "gradle", "build.gradle.kts": "gradle",
 }

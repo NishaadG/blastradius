@@ -160,7 +160,7 @@ def build_graph(tenant: str, meta: dict, services: list[dict], calls: set, expos
             say(f"missing {svc['path']}/{svc['file']}")
             continue
         pkgs, edges = PARSERS[svc["kind"]](text)
-        if meta.get("kind") == "byo" and svc["kind"] in depsdev.EXPAND_KINDS and pkgs:
+        if (meta.get("kind") == "byo" or meta.get("expand")) and svc["kind"] in depsdev.EXPAND_KINDS and pkgs:
             n_direct = min(len(pkgs), depsdev.MAX_DIRECT)
             extra, new_edges, resolved = depsdev.expand(pkgs)
             pkgs = {**extra, **pkgs}
@@ -254,7 +254,7 @@ def ingest(tenant: str, say: Progress = print):
     t = TENANTS[tenant]
     calls, exposed = curated_graph_inputs(tenant)
     say(f"[{tenant}] discovered {len(calls)} service calls and {len(exposed)} exposed service(s) from deployment files")
-    build_graph(tenant, {"title": t["title"], "repo": t["repo"], "codeowners": t["codeowners"], "kind": "curated"},
+    build_graph(tenant, {"title": t["title"], "repo": t["repo"], "codeowners": t["codeowners"], "kind": "curated", "expand": t.get("expand")},
                 t["services"], calls, exposed, True, t["branch"], say)
 
 

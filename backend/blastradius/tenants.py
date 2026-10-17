@@ -80,4 +80,37 @@ TENANTS = {
             ("shoppingassistantservice", "productcatalogservice"),
         ],
     },
+    "anthos": {
+        "title": "Bank of Anthos",
+        "repo": "GoogleCloudPlatform/bank-of-anthos",
+        "branch": "main",
+        "codeowners": ".github/CODEOWNERS",
+        "expand": True,  # Java poms list direct dependencies only; resolve the transitive graph through deps.dev
+        "services": [
+            {"name": "frontend", "path": "src/frontend", "kind": "uv", "file": "uv.lock"},
+            {"name": "userservice", "path": "src/accounts/userservice", "kind": "uv", "file": "uv.lock"},
+            {"name": "contacts", "path": "src/accounts/contacts", "kind": "uv", "file": "uv.lock"},
+            {"name": "loadgenerator", "path": "src/loadgenerator", "kind": "uv", "file": "uv.lock"},
+            {"name": "balancereader", "path": "src/ledger/balancereader", "kind": "maven", "file": "pom.xml"},
+            {"name": "ledgerwriter", "path": "src/ledger/ledgerwriter", "kind": "maven", "file": "pom.xml"},
+            {"name": "transactionhistory", "path": "src/ledger/transactionhistory", "kind": "maven", "file": "pom.xml"},
+            {"name": "accounts-db", "path": "src/accounts/accounts-db", "kind": "none"},
+            {"name": "ledger-db", "path": "src/ledger/ledger-db", "kind": "none"},
+        ],
+        "discover": {
+            "kind": "kubernetes",
+            "files": [f"kubernetes-manifests/{n}.yaml" for n in (
+                "config", "frontend", "userservice", "contacts", "ledger-writer", "balance-reader", "transaction-history",
+                "loadgenerator", "accounts-db", "ledger-db")],
+        },
+        "supplement_calls": [],
+        "supplement_exposed": [],
+        # from the project's architecture diagram (README), used only to cross-check discovery in the evals
+        "reference_calls": [
+            ("frontend", "userservice"), ("frontend", "contacts"), ("frontend", "ledgerwriter"),
+            ("frontend", "balancereader"), ("frontend", "transactionhistory"), ("ledgerwriter", "balancereader"),
+            ("userservice", "accounts-db"), ("contacts", "accounts-db"), ("ledgerwriter", "ledger-db"),
+            ("balancereader", "ledger-db"), ("transactionhistory", "ledger-db"), ("loadgenerator", "frontend"),
+        ],
+    },
 }

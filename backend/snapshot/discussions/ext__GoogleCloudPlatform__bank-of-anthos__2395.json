@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Upgrade org.apache.logging.log4j:log4j-core to version 2.25.3.", "rationale": "This update addresses CVE-2025-68161, which involves a vulnerability in the Socket Appender where TLS hostname verification is not performed.", "kind": "security-fix", "packages": ["org.apache.logging.log4j:log4j-core"]}

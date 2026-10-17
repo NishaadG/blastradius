@@ -7,7 +7,7 @@ const j = async (path, init) => { const r = await fetch(base + path, init); let 
 let { r, b } = await j("/api/health");
 ok("health", r.status === 200 && b.ok, JSON.stringify(b));
 ({ r, b } = await j("/api/tenants"));
-ok("tenants list (2 curated)", Array.isArray(b) && b.filter((t) => t.kind === "curated").length === 2);
+ok("tenants list (3 curated)", Array.isArray(b) && b.filter((t) => t.kind === "curated").length === 3);
 ok("security headers on API", r.headers.get("x-content-type-options") === "nosniff");
 const home = await fetch(base + "/");
 ok("web app serves", home.status === 200 && (await home.text()).includes("Blastradius"));

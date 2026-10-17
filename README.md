@@ -106,9 +106,9 @@ All in [`queries.py`](backend/blastradius/queries.py) and [`memory.py`](backend/
 | Ownership, expertise, decisions | `OWNS`, `COMMITTED`, `Decision-[:DOCUMENTED_IN]->Commit` with `SUPERSEDES` for staleness |
 
 ## Does it work? [EVALS.md](EVALS.md) · [BENCH.md](BENCH.md)
-- `python -m evals.run` recomputes ground truth **without the graph** and compares it with the product: affected-service sets and verdicts for every advisory, that every returned path is a real chain of lockfile edges, exposure distances over the discovered topology, ownership, transitive callers, memory reuse, tenant **and session** isolation, and guardrails. Currently **37/37**, including that every govulncheck finding is stored in the graph with the identical call-graph level.
-- **Discovery is cross-checked** against the hand-written call lists from the projects' docs: 100% recall on OpenTelemetry (plus 7 calls only the deployment files reveal) and 94% on Online Boutique. The one edge it misses (`shoppingassistantservice → productcatalogservice`) is in no deployment file; EVALS.md reports it rather than hiding it.
-- `pytest backend/tests`: **34 tests**: parsers, discovery, MCP over stdio, the LLM loop against a mock model, repo analysis (network mocked, including a Log4Shell found only through a transitive dependency), validation, rate limiting, session isolation and backpressure.
+- `python -m evals.run` recomputes ground truth **without the graph** and compares it with the product: affected-service sets and verdicts for every advisory, that every returned path is a real chain of lockfile edges, exposure distances over the discovered topology, ownership, transitive callers, memory reuse, tenant **and session** isolation, and guardrails. Currently **54/54**, including that every govulncheck finding is stored in the graph with the identical call-graph level.
+- **Discovery is cross-checked** against the hand-written call lists from the projects' docs: 100% recall on OpenTelemetry (plus 7 calls only the deployment files reveal), 100% on Bank of Anthos (Kubernetes env resolved through ConfigMaps, including `jdbc:` URLs) and 94% on Online Boutique. The one edge it misses (`shoppingassistantservice → productcatalogservice`) is in no deployment file; EVALS.md reports it rather than hiding it.
+- `pytest backend/tests`: **38 tests**: parsers, discovery, MCP over stdio, the LLM loop against a mock model, repo analysis (network mocked, including a Log4Shell found only through a transitive dependency), validation, rate limiting, session isolation and backpressure.
 - [BENCH.md](BENCH.md): 10/50/100 concurrent agents on shared memory. Reads stay fast; writes queue (FalkorDB serialises them); the client retries on backpressure and counts every retry.
 
 ## Security model (public deployment)
@@ -138,7 +138,7 @@ node tools/probe.mjs https://<host>        # 14 outsider checks against the live
 `deploy/docker-compose.prod.yml` is the same stack for any Docker host.
 
 ## Data & rules compliance
-Only public data: OSV.dev and deps.dev, plus the public lockfiles, deployment files, `CODEOWNERS` and commit metadata of two open-source projects ([open-telemetry/opentelemetry-demo](https://github.com/open-telemetry/opentelemetry-demo), [GoogleCloudPlatform/microservices-demo](https://github.com/GoogleCloudPlatform/microservices-demo)) treated as two "companies" (tenants). Contributor info is limited to public GitHub handles in commit metadata; bots are labelled as bots. No private, paywalled or personal data. The advisory set is a snapshot as of ingestion time. FalkorDB is the primary and only store.
+Only public data: OSV.dev and deps.dev, plus the public lockfiles, deployment files, `CODEOWNERS` and commit metadata and pull-request discussions of three open-source projects ([open-telemetry/opentelemetry-demo](https://github.com/open-telemetry/opentelemetry-demo), [GoogleCloudPlatform/microservices-demo](https://github.com/GoogleCloudPlatform/microservices-demo), [GoogleCloudPlatform/bank-of-anthos](https://github.com/GoogleCloudPlatform/bank-of-anthos)) treated as three "companies" (tenants). Contributor info is limited to public GitHub handles in commit metadata; bots are labelled as bots. No private, paywalled or personal data. The advisory set is a snapshot as of ingestion time. FalkorDB is the primary and only store.
 
 ## AI assistance disclosure
 This project was built with **Claude Code** as a coding assistant (Anthropic), directed and reviewed by the author. The graph model, queries, judge rules, guardrails and evals are designed to be explainable end to end; the eval and test suites exist specifically to check the assistant-written code against an independent computation.
@@ -154,6 +154,10 @@ deploy/                production compose, Caddyfile, AWS scripts
 tools/                 Playwright helpers, outsider probe
 ```
 
+## The reasoning behind decisions (PR discussions)
+
+Commits say *what* changed; the pull request says *why*. At build time `discussions.py` reads the PR (title, description, comments) behind each dependency-manifest commit from the public GitHub API and asks Gemini for a structured decision: what was decided, the stated reason, the packages concerned. Output is committed in `backend/snapshot/discussions/`, so a deploy needs no key. The model only extracts: a package it names is linked only if it literally appears in the PR or commit text, an empty rationale stays empty, and every decision links to its PR. Two evals check that the graph holds exactly the extracted text and that no invented subject was linked. Ask "why did we upgrade golang.org/x/net?" and the agent calls `why_decision` and cites the PR.
+
 ## CI gate and scheduled watcher
 
 - **GitHub Action / CLI.** `python -m blastradius.ci --path . --baseline ../base --fail-on P0 --sarif out.sarif` builds the graph for the checkout, ranks advisories with the same deterministic judge, writes SARIF for the Security tab and a job summary, and exits 1 when the change *introduces* a finding at or above the threshold. `action.yml` wraps it (it starts a FalkorDB container on the runner); `docs/ci/blastradius.yml` is a ready workflow. Exposure is unknown from a checkout alone, so serious production advisories are ranked as exposed.
@@ -161,7 +165,7 @@ tools/                 Playwright helpers, outsider probe
 
 ## Limitations (honest)
 - Reachability is **function-level only for Go** (govulncheck). For npm, PyPI and Maven it is package-level: a vulnerable function that is never called still counts as a path, and the case file says "not analysed".
-- The two curated tenants' `go.mod` and pinned `requirements.txt` are flat lists, so those services have direct dependency edges only; analysed repos get resolved transitive trees from deps.dev (up to 60 direct dependencies per manifest).
+- Online Boutique's and OpenTelemetry's `go.mod` and pinned `requirements.txt` are flat lists, so those services have direct dependency edges only (Bank of Anthos uses `uv.lock` and resolved Maven trees, so it has real transitive paths); analysed repos get resolved transitive trees from deps.dev (up to 60 direct dependencies per manifest).
 - The Maven/Gradle parsers read literal versions; versions that come from a parent BOM are recovered through deps.dev resolution, not by evaluating the build.
 - Discovery reads Compose and Kubernetes env vars; calls made through other means (service meshes, hard-coded hosts) are not seen.
 - Analysed repos have no company-brain data (no commit history is ingested for them) and unknown exposure.

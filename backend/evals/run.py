@@ -11,7 +11,7 @@ import sys
 from collections import deque
 from pathlib import Path
 
-from blastradius import config, db, ingest as ing, memory, osv, queries as q, triage
+from blastradius import config, db, depsdev, ingest as ing, memory, osv, queries as q, triage
 from blastradius.parsers import PARSERS
 from blastradius.tenants import TENANTS
 
@@ -30,6 +30,10 @@ def load_truth(tenant):
             continue
         f = config.cached_path(ing._rel(t["repo"], f"{s['path']}/{s['file']}"))
         pk, ed = PARSERS[s["kind"]](f.read_text(encoding="utf-8"))
+        if t.get("expand") and s["kind"] in depsdev.EXPAND_KINDS and pk:  # same transitive resolution the build applies (cached deps.dev data)
+            extra, new_edges, _ = depsdev.expand(pk)
+            pk = {**extra, **pk}
+            ed = list(ed) + [(a, b, pk[b]["dev"]) for a, b in new_edges]
         svc_pkgs[s["name"]] = set(pk)
         svc_edges[s["name"]] = {(a, b) for a, b, _ in ed if a is not None} | {(s["name"], b) for a, b, _ in ed if a is None}
         dev_of[s["name"]] = {k for k, v in pk.items() if v["dev"]}
@@ -148,7 +152,7 @@ def eval_tenant(tenant):
                 if not got or got[0][0] != f["level"]:
                     bad_reach += 1
     check(f"{tenant}/reachability", f"govulncheck findings stored with identical call-graph level ({checked} checked)",
-          bad_reach == 0 and checked > 0, f"{bad_reach} mismatches")
+          bad_reach == 0 and (checked > 0 or not _reach.go_services(tenant)), f"{bad_reach} mismatches")
 
     # PR-discussion reasoning: graph decisions equal the cached extractions, link to their PR, and name only packages the PR text mentions
     import json as _j

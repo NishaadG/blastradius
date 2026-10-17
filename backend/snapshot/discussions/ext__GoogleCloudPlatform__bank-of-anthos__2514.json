@@ -1,0 +1,1 @@
+{"is_decision": true, "decision": "Upgrade com.fasterxml.jackson.core:jackson-databind to version 2.22.1.", "rationale": "The update addresses CVE-2026-54515, which allows case-insensitive deserialization to bypass per-property @JsonIgnoreProperties exclusions.", "kind": "security-fix", "packages": ["com.fasterxml.jackson.core:jackson-databind"]}
