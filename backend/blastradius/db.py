@@ -38,7 +38,8 @@ def _with_backoff(fn, attempts: int = 6):
 @lru_cache(maxsize=1)
 def client() -> falkordb.FalkorDB:
     return falkordb.FalkorDB(host=config.FALKOR_HOST, port=config.FALKOR_PORT,
-                             username=config.FALKOR_USERNAME, password=config.FALKOR_PASSWORD)
+                             username=config.FALKOR_USERNAME, password=config.FALKOR_PASSWORD,
+                             socket_connect_timeout=2)  # database down -> fail in seconds, not after a long hang
 
 
 def graph(tenant: str):

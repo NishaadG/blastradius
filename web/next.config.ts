@@ -10,6 +10,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  devIndicators: false,
   cacheComponents: true,
   partialPrefetching: true,
   async headers() {

@@ -259,7 +259,7 @@ export default function Home() {
         <div className="flex items-baseline gap-2.5">
           <Mark />
           <span className="serif text-[22px] font-medium leading-none tracking-[-0.01em]">Blastradius</span>
-          <span className="label hidden xl:inline">supply-chain triage on a graph</span>
+          <span className={clsx("label hidden whitespace-nowrap", mine.length ? "min-[1800px]:inline" : "xl:inline")}>supply-chain triage on a graph</span>
         </div>
         <nav className="flex items-center gap-5" aria-label="Tenant">
           {curated.map((t) => (
@@ -293,12 +293,12 @@ export default function Home() {
           )}
         </nav>
         <div className="ml-auto flex items-center gap-5">
-          <span className="mono num hidden items-center gap-2 text-[11px] text-ink-2 md:flex">
+          <span className="mono num hidden items-center gap-2 whitespace-nowrap text-[11px] text-ink-2 md:flex">
             <i className={clsx("inline-block h-[7px] w-[7px]", isUp ? "bg-green" : "bg-red")} />
             {isUp ? `FalkorDB · ${nodeCount.toLocaleString()} nodes · ${edgeCount.toLocaleString()} edges` : "FalkorDB offline"}
           </span>
           {evalInfo && (
-            <span className="mono hidden text-[11px] text-ink-2 xl:block" title="python -m evals.run, computed without the graph">
+            <span className="mono hidden whitespace-nowrap text-[11px] text-ink-2 xl:block" title="python -m evals.run, computed without the graph">
               {evalInfo.passed}/{evalInfo.total} evals pass
             </span>
           )}
