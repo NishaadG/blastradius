@@ -142,7 +142,8 @@ def _offline(tenant, question, sid):
 
 
 def _http() -> httpx.Client:  # overridden in tests
-    return httpx.Client(timeout=httpx.Timeout(20, connect=5))
+    # fresh connection per request: a reused keep-alive connection stalled the second round on the server
+    return httpx.Client(timeout=httpx.Timeout(20, connect=5), limits=httpx.Limits(max_keepalive_connections=0))
 
 
 def _gemini(tenant, question, key, sid):
