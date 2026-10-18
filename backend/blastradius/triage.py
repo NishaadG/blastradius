@@ -59,7 +59,8 @@ def _not_in_graph(tenant, ident, steps):
         return {"verdict": "NOT_AFFECTED", "reason": "version_outside_range", "advisory": s,
                 "headline": f"{tag} targets {e['package']}, but you run {vers}: outside the affected range.",
                 "evidence": evidence}
-    shown = ", ".join(n.split(":")[-1] for _, n in names[:2]) + (f" +{len(names) - 2} more" if len(names) > 2 else "")
+    short = list(dict.fromkeys(n.split(":")[-1] for _, n in names))  # same artifact under several ecosystems/groups -> once
+    shown = ", ".join(short[:2]) + (f" +{len(short) - 2} more" if len(short) > 2 else "")
     return {"verdict": "NOT_AFFECTED", "reason": "no_path", "advisory": s,
             "headline": f"No path: {tag} affects {shown or 'n/a'}, and none of it exists anywhere in the dependency graph.",
             "evidence": evidence}
