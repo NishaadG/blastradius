@@ -83,18 +83,50 @@ flowchart LR
 The LLM never sees a database credential and never writes Cypher. It can pick a tool and phrase the result; it **cannot change a verdict**. The verdict (`AFFECTED / NOT_AFFECTED / NEEDS_HUMAN`) comes from plain rules in [`triage.py`](backend/blastradius/triage.py).
 
 ## Graph data model
+```mermaid
+graph LR
+  Advisory -- AFFECTS --> Package
+  Alias -- ALIAS_OF --> Advisory
+  Service -- DEPENDS_ON --> Package
+  Package -- DEPENDS_ON --> Package
+  Service -- CALLS --> Service
+  Service -- REACHES --> Advisory
+  Repo -- CONTAINS --> Service
+  Owner -- OWNS --> Service
+  Owner -- COMMITTED --> Service
+  Commit -- TOUCHED --> Service
+  Decision -- DOCUMENTED_IN --> Commit
+  Decision -- DISCUSSED_IN --> Discussion
+  Decision -- CONCERNS --> Package
+  Decision -- SUPERSEDES --> Decision
+  Case -- ABOUT --> Advisory
+  Case -- IN --> Service
+  Case -- USED --> Playbook
+  Run -- HAS_STEP --> Step
+  Step -- HANDS_OFF_TO --> Step
+```
+Properties and scoping:
 ```
 (Meta)  tenant title, repo, exposure_known, built_at
 (Repo)-[:CONTAINS]->(Service)-[:CALLS]->(Service)               // CALLS and exposure are DISCOVERED from deployment files
 (Service)-[:DEPENDS_ON {direct, dev}]->(Package)-[:DEPENDS_ON {dev}]->(Package)
 (Advisory)-[:AFFECTS {fixed}]->(Package)        (Alias)-[:ALIAS_OF]->(Advisory)   // CVE-… ⇄ GHSA-…
 (Owner {kind: team|person|bot})-[:OWNS]->(Service) ; (Owner)-[:COMMITTED {count,last}]->(Service)
-(Commit)-[:TOUCHED]->(Service)
-(Decision)-[:DOCUMENTED_IN]->(Commit) ; (Decision)-[:CONCERNS]->(Service|Package) ; (Decision)-[:SUPERSEDES]->(Decision)
+(Commit)-[:TOUCHED]->(Service) ; (Service)-[:REACHES {level: called|imported|required, symbol, stack}]->(Advisory)   // govulncheck, Go only
+(Decision)-[:DOCUMENTED_IN]->(Commit) ; (Decision)-[:CONCERNS]->(Service|Package) ; (Decision)-[:SUPERSEDES]->(Decision) ; (Decision {rationale, kind})-[:DISCUSSED_IN]->(Discussion {url, title})
 -- memory, written by the agents, scoped by session --
 (Case {sid, decision, rationale, actor, ts, reused})-[:ABOUT]->(Advisory) ; (Case)-[:IN]->(Service) ; (Case)-[:USED]->(Playbook)
 (Run {sid})-[:HAS_STEP]->(Step {agent, tool, summary, ms}) ; (Step)-[:HANDS_OFF_TO]->(Step)
 ```
+
+## Where the graph does the work
+Every answer the agent gives is a traversal result, never a model guess:
+- **Affected or not** is whether `shortestPath((Service)-[:DEPENDS_ON*]->(Package))` exists for a package the advisory `AFFECTS`. No path is the evidence for `NOT_AFFECTED`.
+- **Priority** comes from a second path over `CALLS` to an internet-exposed service, plus `REACHES` where the vulnerable function is known to be called.
+- **Who to ask** and **why it was done** come from `OWNS`, `COMMITTED` and `Decision → DOCUMENTED_IN / DISCUSSED_IN`.
+- **Memory** is a traversal too: an earlier `Case` is found through `(Case)-[:ABOUT]->(Advisory)-[:AFFECTS]->(Package)`.
+
+The UI shows the exact Cypher and its latency for each step. Stop the FalkorDB container and the product stops answering. There is no cache or fallback data path.
 
 ## The Cypher the product depends on
 All in [`queries.py`](backend/blastradius/queries.py) and [`memory.py`](backend/blastradius/memory.py); the UI shows the exact query and latency for every step.
