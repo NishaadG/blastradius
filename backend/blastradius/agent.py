@@ -142,7 +142,7 @@ def _offline(tenant, question, sid):
 
 
 def _http() -> httpx.Client:  # overridden in tests
-    return httpx.Client(timeout=40)
+    return httpx.Client(timeout=httpx.Timeout(20, connect=5))
 
 
 def _gemini(tenant, question, key, sid):
@@ -160,12 +160,18 @@ def _gemini(tenant, question, key, sid):
             body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents}
             if rnd < MAX_TOOL_ROUNDS:  # last round: no tools, so the model must answer from what it has gathered
                 body["tools"] = [{"functionDeclarations": TOOLS}]
-            r = None
-            for m in ([None] if base else models):  # overloaded/retired model -> next one
+            r, err = None, None
+            for m in ([None] if base else models):  # overloaded, retired or stalled model -> next one
                 url = base or f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
-                r = cli.post(url, headers={"x-goog-api-key": key}, json=body)
+                try:
+                    r = cli.post(url, headers={"x-goog-api-key": key}, json=body)
+                except httpx.TransportError as e:
+                    r, err = None, e
+                    continue
                 if r.status_code not in (404, 429, 500, 502, 503, 504):
                     break
+            if r is None:
+                raise err
             r.raise_for_status()
             parts = r.json()["candidates"][0]["content"]["parts"]
             fcs = [p["functionCall"] for p in parts if "functionCall" in p]
