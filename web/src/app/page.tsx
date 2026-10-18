@@ -6,6 +6,7 @@ import GraphCanvas from "@/components/GraphCanvas";
 import ResultPanel from "@/components/ResultPanel";
 import { CompanyView, MemoryView, RiskBoard } from "@/components/Views";
 import RepoAnalyzer from "@/components/RepoAnalyzer";
+import Answer from "@/components/Answer";
 import { Label } from "@/components/ui";
 import { api, AskResult, Brain, GraphData, healthy, ID_RE, Risk, TenantInfo, TriageResult } from "@/lib/api";
 
@@ -388,7 +389,7 @@ export default function Home() {
                   <p className="text-[13px] text-red">{error}</p>
                 ) : (
                   <>
-                    <p className="serif whitespace-pre-wrap text-[17px] leading-snug">{answer?.answer}</p>
+                    <div className="serif text-[17px] leading-snug"><Answer text={answer?.answer ?? ""} /></div>
                     <details className="mt-2" open={answer?.mode === "gemini"}>
                       <summary className="mono cursor-pointer text-[10.5px] text-faint hover:text-ink">
                         how this was answered · {answer?.tool_calls.length} tool call{answer?.tool_calls.length === 1 ? "" : "s"} ·{" "}

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blastradius title card</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&family=Newsreader:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+  :root { --paper:#f3f0e8; --ink:#1b1913; --ink-2:#4d493e; --faint:#857f70; --rule:#d9d3c5; --red:#b3261e; }
+  html, body { margin:0; height:100%; background:var(--paper); color:var(--ink); font-family:"IBM Plex Sans", system-ui, sans-serif; }
+  main { height:100%; display:flex; flex-direction:column; justify-content:center; padding:0 120px; box-sizing:border-box; }
+  .label { font-family:"IBM Plex Mono", monospace; font-size:14px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); }
+  h1 { font-family:Newsreader, Georgia, serif; font-weight:500; font-size:104px; letter-spacing:-.02em; margin:18px 0 8px; }
+  .lede { font-family:Newsreader, Georgia, serif; font-size:34px; color:var(--ink-2); margin:0 0 56px; max-width:1100px; line-height:1.25; }
+  .lede em { color:var(--red); font-style:italic; }
+  .grid { display:grid; grid-template-columns:repeat(4, auto); gap:0; border-top:1px solid var(--rule); max-width:1250px; }
+  .grid div { padding:20px 36px 0 0; }
+  .n { font-family:Newsreader, Georgia, serif; font-size:44px; }
+  .k { font-size:15px; color:var(--ink-2); margin-top:4px; }
+  .links { margin-top:64px; font-family:"IBM Plex Mono", monospace; font-size:19px; color:var(--ink-2); line-height:1.9; }
+  .links b { color:var(--ink); font-weight:500; }
+</style>
+</head>
+<body>
+<main>
+  <div class="label">Graph Hacks · FalkorDB × WeMakeDevs · all three tracks</div>
+  <h1>Blastradius</h1>
+  <p class="lede">Supply-chain triage on a FalkorDB graph, where <em>no path found</em> is an answer.</p>
+  <div class="grid">
+    <div><div class="n">57/57</div><div class="k">evals vs. an independent computation</div></div>
+    <div><div class="n">42</div><div class="k">unit tests</div></div>
+    <div><div class="n">3</div><div class="k">real projects, one graph each</div></div>
+    <div><div class="n">$0</div><div class="k">runs locally, offline</div></div>
+  </div>
+  <div class="links">
+    <div><b>code</b>&nbsp;&nbsp;github.com/NishaadG/blastradius</div>
+    <div><b>live</b>&nbsp;&nbsp;13-203-50-195.sslip.io</div>
+  </div>
+</main>
+</body>
+</html>
