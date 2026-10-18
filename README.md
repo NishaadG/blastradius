@@ -7,6 +7,8 @@ Built for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB), enter
 
 **Live demo: https://13-203-50-195.sslip.io** (small shared server; see [Hosted demo vs running it yourself](#hosted-demo-vs-running-it-yourself)). MCP endpoint: `https://13-203-50-195.sslip.io/mcp` (read-only).
 
+**Demo video (3 min):** https://youtu.be/sX5UA_kIVss
+
 **Blog post:** ["No path found" is the most useful thing a security agent can say](https://dev.to/the_one_who/no-path-found-is-the-most-useful-thing-a-security-agent-can-say-20c8)
 
 ![Blastradius triage of a critical protobufjs advisory: red attack path from the exposed frontend down to the vulnerable package, with the case file on the right](docs/img/triage.png)
